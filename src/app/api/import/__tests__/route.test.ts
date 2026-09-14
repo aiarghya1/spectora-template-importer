@@ -1,4 +1,5 @@
 import { NextRequest } from "next/server";
+import { createHash } from "node:crypto";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { buildXlsx, SPECTORA_HEADERS } from "@/lib/import/__tests__/workbook";
 import { createClient } from "@/lib/supabase/server";
@@ -9,11 +10,25 @@ vi.mock("@/lib/supabase/server", () => ({ createClient: vi.fn() }));
 
 const URL = "http://localhost/api/import";
 const XLSX_BYTES = buildXlsx([SPECTORA_HEADERS, ["Roof", "Coverings", "Asphalt", "<p>Asphalt</p>", "info"]]);
+const XLSX_SHA = createHash("sha256").update(XLSX_BYTES).digest("hex");
+const USER = "11111111-1111-4111-8111-111111111111";
+const STAGED = `${USER}/22222222-2222-4222-8222-222222222222.xlsx`;
 
 function withDb(resolve: Resolver = () => ({}), claims?: Record<string, unknown> | null) {
   const db = fakeSupabase(resolve, { claims });
   vi.mocked(createClient).mockResolvedValue(db.client as never);
   return db;
+}
+
+function withStaging(resolve: Resolver = () => ({})) {
+  const db = fakeSupabase(resolve, { claims: { sub: USER } });
+  const download = vi.fn(async () => ({ data: new Blob([XLSX_BYTES as BlobPart]), error: null }));
+  const remove = vi.fn(async () => ({ data: [], error: null }));
+  vi.mocked(createClient).mockResolvedValue({
+    ...db.client,
+    storage: { from: () => ({ download, remove }) },
+  } as never);
+  return { ...db, download, remove };
 }
 
 function upload(fields: Record<string, string | File>, headers?: Record<string, string>) {
@@ -53,6 +68,19 @@ describe("POST /api/import — request handling", () => {
 
     const badMode = await POST(upload({ mode: "delete-everything", file: xlsxFile() }));
     expect(badMode.status).toBe(400);
+  });
+
+  it("requires a preview fingerprint and exactly one source before commit", async () => {
+    withDb();
+    expect((await POST(upload({ mode: "commit", file: xlsxFile() }))).status).toBe(400);
+    expect((await POST(upload({ mode: "preview", file: xlsxFile(), stagedPath: STAGED, filename: "InterNACHI Residential.xlsx" }))).status).toBe(400);
+  });
+
+  it("rejects a direct file larger than the function's body cap", async () => {
+    withDb();
+    const large = new File([new Uint8Array(4 * 1024 * 1024 + 1)], "large.xlsx");
+    const response = await POST(upload({ mode: "preview", file: large }, { "content-length": "0" }));
+    expect(response.status).toBe(413);
   });
 
   it("422 with a specific code for the plain-text export", async () => {
@@ -114,7 +142,7 @@ describe("POST /api/import — commit", () => {
 
   it("defaults the name to the file name", async () => {
     const db = withDb(() => ({ data: { template_id: "t", import_id: "i" } }));
-    await POST(upload({ mode: "commit", file: xlsxFile("Pre-listing 2026.xlsx") }));
+    await POST(upload({ mode: "commit", file: xlsxFile("Pre-listing 2026.xlsx"), sha256: XLSX_SHA }));
     expect(db.ops[0].payload).toMatchObject({ p_name: "Pre-listing 2026" });
   });
 
@@ -123,7 +151,7 @@ describe("POST /api/import — commit", () => {
     ["template limit reached (200 per account)", 429, "quota"],
   ])("maps '%s' to %i %s", async (message, status, code) => {
     withDb(() => ({ error: { code: "54000", message } }));
-    const response = await POST(upload({ mode: "commit", file: xlsxFile() }));
+    const response = await POST(upload({ mode: "commit", file: xlsxFile(), sha256: XLSX_SHA }));
     expect(response.status).toBe(status);
     expect(await response.json()).toMatchObject({ ok: false, code });
   });
@@ -131,11 +159,54 @@ describe("POST /api/import — commit", () => {
   it("500 with a safe message when the database fails (nothing is written)", async () => {
     const log = vi.spyOn(console, "error").mockImplementation(() => {});
     withDb(() => ({ error: { code: "XX000", message: "internal detail that must not leak" } }));
-    const response = await POST(upload({ mode: "commit", file: xlsxFile() }));
+    const response = await POST(upload({ mode: "commit", file: xlsxFile(), sha256: XLSX_SHA }));
     const body = await response.json();
     expect(response.status).toBe(500);
     expect(body).toMatchObject({ ok: false, code: "failed" });
     expect(JSON.stringify(body)).not.toContain("internal detail");
+    log.mockRestore();
+  });
+});
+
+describe("POST /api/import — private staged file", () => {
+  it("previews a file from the caller's private path without a large function request", async () => {
+    const storage = withStaging();
+    const response = await POST(upload({ mode: "preview", stagedPath: STAGED, filename: "InterNACHI Residential.xlsx" }));
+    expect(response.status).toBe(200);
+    expect(await response.json()).toMatchObject({ ok: true, sha256: XLSX_SHA, parse: { stats: { comments: 1 } } });
+    expect(storage.download).toHaveBeenCalledWith(STAGED);
+  });
+
+  it("rejects a foreign path before touching Storage", async () => {
+    const storage = withStaging();
+    const response = await POST(upload({ mode: "preview", stagedPath: STAGED.replace(USER, "33333333-3333-4333-8333-333333333333"), filename: "InterNACHI Residential.xlsx" }));
+    expect(response.status).toBe(400);
+    expect(storage.download).not.toHaveBeenCalled();
+  });
+
+  it("commits only the previewed bytes and removes the staged object", async () => {
+    const storage = withStaging((op) => op.name === "import_template" ? { data: { template_id: "t", import_id: "i" } } : {});
+    const response = await POST(upload({ mode: "commit", stagedPath: STAGED, filename: "InterNACHI Residential.xlsx", sha256: XLSX_SHA }));
+    expect(response.status).toBe(200);
+    expect(storage.remove).toHaveBeenCalledWith([STAGED]);
+    expect(storage.ops[0].payload).toMatchObject({ p_filename: "InterNACHI Residential.xlsx", p_file_sha256: XLSX_SHA });
+  });
+
+  it("fails clearly for a missing or oversized staged object", async () => {
+    const storage = withStaging();
+    storage.download.mockResolvedValueOnce({ data: null, error: new Error("gone") } as never);
+    expect((await POST(upload({ mode: "preview", stagedPath: STAGED, filename: "InterNACHI Residential.xlsx" }))).status).toBe(422);
+    storage.download.mockResolvedValueOnce({ data: { size: 20 * 1024 * 1024 + 1 }, error: null } as never);
+    expect((await POST(upload({ mode: "preview", stagedPath: STAGED, filename: "InterNACHI Residential.xlsx" }))).status).toBe(413);
+  });
+
+  it("keeps a successful commit successful when private-file cleanup fails", async () => {
+    const storage = withStaging((op) => op.name === "import_template" ? { data: { template_id: "t", import_id: "i" } } : {});
+    storage.remove.mockResolvedValueOnce({ data: null, error: new Error("cleanup failed") } as never);
+    const log = vi.spyOn(console, "error").mockImplementation(() => {});
+    const response = await POST(upload({ mode: "commit", stagedPath: STAGED, filename: "InterNACHI Residential.xlsx", sha256: XLSX_SHA }));
+    expect(response.status).toBe(200);
+    expect(log).toHaveBeenCalledWith("Could not remove staged import after commit", expect.any(Error));
     log.mockRestore();
   });
 });

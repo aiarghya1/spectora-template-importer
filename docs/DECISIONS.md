@@ -36,15 +36,20 @@ Short architecture decision log. Each entry: decision, why, what we gave up.
 - **Why:** a switching customer needs proof nothing was lost before they trust the new tool.
 
 ## D9 — Upload limits & parsing safety
-- 4 MB cap (Vercel function body limit is 4.5 MB), row cap, content sniffing (not just extension), server-side parsing only.
+- Files up to 4 MB go through the Route Handler. Files from 4 to 20 MB upload directly to a private Supabase
+  Storage bucket in resumable chunks, avoiding Vercel's 4.5 MB function-body limit. The server downloads and
+  parses every file. The bucket and parser both enforce the 20 MB cap.
+- Row cap, content sniffing (not just extension), zip-bomb guard, server-side parsing only.
 - Upload goes through a Route Handler, not a Server Action: Next 16 caps Server Action bodies at 1 MB by default,
   and a Route Handler lets us return structured error codes for the failure-case UI.
 
-## D10 — Stateless preview → commit
-- Preview parses and returns the result; nothing is stored. Commit re-uploads the same file, re-parses on the
-  server and checks the SHA-256 matches the preview.
-- **Why:** never trust a client-sent tree; no draft tables to clean up; any server instance can handle either step.
-- **Gave up:** a second upload of the same bytes (≤ 4 MB, acceptable).
+## D10 — Preview → commit with a source fingerprint
+- Small files are sent again on commit. Large files stay in private Storage until commit; both requests parse
+  server-side and commit checks the SHA-256 from preview. No client-sent tree is trusted.
+- The preview response is bounded: large exports show exact totals and representative rows, while the full
+  issue list appears in the saved report. This avoids exceeding the function response limit.
+- Staged files are removed on success or preview discard. A secret-protected daily cron removes abandoned files
+  older than 24 hours through the Storage API.
 
 ## D11 — Visual editor only where it is lossless
 - Tiptap silently drops markup outside its schema (colour spans, tables, divs). Comments containing such markup
@@ -69,7 +74,7 @@ Short architecture decision log. Each entry: decision, why, what we gave up.
 - **Server contracts** (validation, error mapping, redirects) → a recording fake Supabase client.
 - **UI behaviour** → jsdom component tests.
 - **The whole workflow** → Playwright against a real Supabase project.
-- Coverage limits in CI are set just below measured values, and the critical server paths are held at 100%.
+- CI enforces 100% line, statement, branch and function coverage of `src/`. Code that can never run is deleted rather than hidden with coverage-ignore comments.
 - **Gave up:** browser tests that run without a live Supabase project. Faking auth plus PostgREST
   would prove less than the PGlite and fake-client layers already do.
 - SheetJS 0.20.x from cdn.sheetjs.com — npm `xlsx@0.18.5` has known prototype-pollution and ReDoS CVEs.

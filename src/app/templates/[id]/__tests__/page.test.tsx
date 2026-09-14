@@ -79,6 +79,12 @@ describe("template editor page", () => {
     await expect(page()).rejects.toThrow("NOT_FOUND");
   });
 
+  it("treats an unreadable section as empty", async () => {
+    vi.mocked(getSectionContent).mockResolvedValue(null);
+    render(await page({ section: "s1" }));
+    expect(screen.getByText("No items in this section yet.")).toBeInTheDocument();
+  });
+
   it("titles the tab with the template name", async () => {
     expect(await generateMetadata({ params: Promise.resolve({ id: T }) })).toEqual({ title: "InterNACHI Residential · Template Importer" });
     vi.mocked(getTemplate).mockResolvedValue(null);

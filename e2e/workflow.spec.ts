@@ -8,7 +8,6 @@ import { buildXlsx, SPECTORA_HEADERS } from "../src/lib/import/__tests__/workboo
 
 const EMAIL = process.env.E2E_EMAIL;
 const PASSWORD = process.env.E2E_PASSWORD;
-test.skip(!EMAIL || !PASSWORD, "Set E2E_EMAIL and E2E_PASSWORD (and E2E_BASE_URL for a deployed app) to run.");
 
 const XLSX_MIME = "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet";
 const RUN = Date.now().toString(36);

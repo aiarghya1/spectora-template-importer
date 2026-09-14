@@ -1,15 +1,18 @@
 // @vitest-environment jsdom
 import type { ReactNode } from "react";
-import { act, fireEvent, render, screen } from "@testing-library/react";
+import { act, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { prepareImport } from "@/lib/import/commit";
-import { MAX_UPLOAD_BYTES } from "@/lib/import/file-check";
+import { MAX_DIRECT_UPLOAD_BYTES, MAX_UPLOAD_BYTES } from "@/lib/import/file-check";
 import { buildXlsx, SPECTORA_HEADERS } from "@/lib/import/__tests__/workbook";
 import { ImportWizard } from "../import-wizard";
 
-const { push } = vi.hoisted(() => ({ push: vi.fn() }));
+const { push, stageMock, removeMock } = vi.hoisted(() => ({
+  push: vi.fn(), stageMock: vi.fn(), removeMock: vi.fn(),
+}));
 vi.mock("next/navigation", () => ({ useRouter: () => ({ push, refresh: vi.fn() }) }));
+vi.mock("@/lib/import/staged-upload", () => ({ stageImportFile: stageMock, removeStagedFile: removeMock }));
 vi.mock("next/link", () => ({
   default: ({ href, children }: { href: string; children: ReactNode }) => <a href={href}>{children}</a>,
 }));
@@ -51,6 +54,8 @@ const xlsx = (name = "InterNACHI Residential.xlsx") => new File(["x"], name);
 beforeEach(() => {
   vi.clearAllMocks();
   fetchMock.mockReset();
+  stageMock.mockReset().mockResolvedValue("11111111-1111-4111-8111-111111111111/22222222-2222-4222-8222-222222222222.xlsx");
+  removeMock.mockReset().mockResolvedValue(undefined);
   vi.stubGlobal("fetch", fetchMock);
 });
 
@@ -81,7 +86,7 @@ describe("ImportWizard — failures", () => {
     expect(screen.getByText("Name · Price")).toBeInTheDocument();
   });
 
-  it("rejects files over 4 MB without uploading", async () => {
+  it("rejects files over 20 MB without uploading", async () => {
     const { user, input } = setup();
     await user.upload(input(), new File([new Uint8Array(MAX_UPLOAD_BYTES + 1)], "huge.xlsx"));
     expect(screen.getByText("The file is too large")).toBeInTheDocument();
@@ -97,6 +102,117 @@ describe("ImportWizard — failures", () => {
 
     await user.upload(input(), xlsx());
     expect(await screen.findByText(/The server returned an unexpected response/)).toBeInTheDocument();
+  });
+});
+
+describe("ImportWizard — large private uploads", () => {
+  const largeFile = () => new File([new Uint8Array(MAX_DIRECT_UPLOAD_BYTES + 1)], "Large.xlsx");
+
+  it("stages a large file, shows a bounded preview, then commits its same private path", async () => {
+    stageMock.mockImplementationOnce(async (_file: File, onProgress: (percent: number) => void) => {
+      onProgress(42);
+      return "11111111-1111-4111-8111-111111111111/22222222-2222-4222-8222-222222222222.xlsx";
+    });
+    const data = {
+      ...preview("Large.xlsx"), previewSample: true,
+      previewTotals: { sections: 20, items: 200, comments: 300, issues: 400, columns: 7 },
+    };
+    fetchMock.mockReturnValueOnce(reply({ status: 200, body: data })).mockReturnValueOnce(
+      reply({ status: 200, body: { ok: true, templateId: "t-large", importId: "i-large" } }),
+    );
+    const { user, input } = setup();
+    await user.upload(input(), largeFile());
+    expect(await screen.findByText("Preview — nothing saved yet")).toBeInTheDocument();
+    expect(stageMock).toHaveBeenCalledOnce();
+    expect(screen.getByRole("heading", { name: "Sample of what will be created" })).toBeInTheDocument();
+    const stagedPath = "11111111-1111-4111-8111-111111111111/22222222-2222-4222-8222-222222222222.xlsx";
+    const first = fetchMock.mock.calls[0][1]?.body as FormData;
+    expect(first.get("file")).toBeNull();
+    expect(first.get("stagedPath")).toBe(stagedPath);
+    expect(first.get("filename")).toBe("Large.xlsx");
+
+    await user.click(screen.getByRole("button", { name: "Import template" }));
+    const second = fetchMock.mock.calls[1][1]?.body as FormData;
+    expect(second.get("stagedPath")).toBe(stagedPath);
+    expect(second.get("sha256")).toBe(data.sha256);
+    expect(push).toHaveBeenCalledWith("/templates/t-large?imported=1");
+  });
+
+  it("cleans up a staged file when the preview is discarded", async () => {
+    fetchMock.mockReturnValueOnce(reply({ status: 200, body: { ...preview("Large.xlsx"), previewSample: true, previewTotals: { sections: 1, items: 1, comments: 1, issues: 0, columns: 7 } } }));
+    const { user, input } = setup();
+    await user.upload(input(), largeFile());
+    await user.click(await screen.findByRole("button", { name: "Choose a different file" }));
+    expect(removeMock).toHaveBeenCalledWith("11111111-1111-4111-8111-111111111111/22222222-2222-4222-8222-222222222222.xlsx");
+  });
+
+  it("shows an upload failure before sending any preview request", async () => {
+    stageMock.mockRejectedValueOnce(new Error("Storage unavailable"));
+    const { user, input } = setup();
+    await user.upload(input(), largeFile());
+    expect(await screen.findByText("Storage unavailable")).toBeInTheDocument();
+    expect(fetchMock).not.toHaveBeenCalled();
+  });
+
+  it("uses a safe message for a non-Error upload failure", async () => {
+    stageMock.mockRejectedValueOnce("offline");
+    const { user, input } = setup();
+    await user.upload(input(), largeFile());
+    expect(await screen.findByText("The upload failed. Try again.")).toBeInTheDocument();
+    expect(fetchMock).not.toHaveBeenCalled();
+  });
+
+  it("cleans up a staged object when server preview rejects it", async () => {
+    fetchMock.mockReturnValueOnce(reply({ status: 422, body: { ok: false, code: "unreadable", message: "Damaged workbook." } }));
+    const { user, input } = setup();
+    await user.upload(input(), largeFile());
+    expect(await screen.findByText("Damaged workbook.")).toBeInTheDocument();
+    await waitFor(() => expect(removeMock).toHaveBeenCalledOnce());
+  });
+
+  it("ignores and removes an upload that finishes after another file is chosen", async () => {
+    let finish!: (path: string) => void;
+    let progress!: (percent: number) => void;
+    stageMock.mockImplementationOnce((_file: File, onProgress: (percent: number) => void) => {
+      progress = onProgress;
+      return new Promise<string>((resolve) => { finish = resolve; });
+    });
+    fetchMock.mockReturnValueOnce(reply({ status: 200, body: preview("Small.xlsx") }));
+    const { user, input } = setup();
+    await user.upload(input(), largeFile());
+    fireEvent.drop(document.querySelector('input[type="file"]')!.closest("label")!, { dataTransfer: { files: [xlsx("Small.xlsx")] } });
+    expect(await screen.findByText("Preview — nothing saved yet")).toBeInTheDocument();
+    progress(90);
+    await act(async () => finish("11111111-1111-4111-8111-111111111111/22222222-2222-4222-8222-222222222222.xlsx"));
+    await waitFor(() => expect(removeMock).toHaveBeenCalledOnce());
+    expect(screen.getByText("Small.xlsx")).toBeInTheDocument();
+  });
+
+  it("does not replace a newer preview with a late upload error", async () => {
+    let failUpload!: (reason: unknown) => void;
+    stageMock.mockImplementationOnce(() => new Promise<string>((_resolve, reject) => { failUpload = reject; }));
+    fetchMock.mockReturnValueOnce(reply({ status: 200, body: preview("Small.xlsx") }));
+    const { user, input } = setup();
+    await user.upload(input(), largeFile());
+    fireEvent.drop(document.querySelector('input[type="file"]')!.closest("label")!, { dataTransfer: { files: [xlsx("Small.xlsx")] } });
+    expect(await screen.findByText("Preview — nothing saved yet")).toBeInTheDocument();
+    await act(async () => failUpload("late failure"));
+    expect(screen.queryByText("late failure")).not.toBeInTheDocument();
+  });
+
+  it("does not claim a sampled issue list is empty when the full result has issues", async () => {
+    const data = preview("Large.xlsx");
+    data.parse.sections = [];
+    data.parse.issues = [];
+    fetchMock.mockReturnValueOnce(reply({ status: 200, body: {
+      ...data, previewSample: true,
+      previewTotals: { sections: 1, items: 1, comments: 1, issues: 50, columns: 7 },
+    } }));
+    const { user, input } = setup();
+    await user.upload(input(), largeFile());
+    expect(await screen.findByText("50 issues were found. Open the full import report after saving.")).toBeInTheDocument();
+    expect(screen.getByText("The full structure will be available in the editor after import.")).toBeInTheDocument();
+    expect(screen.queryByText("No issues: every row imported as-is.")).not.toBeInTheDocument();
   });
 });
 

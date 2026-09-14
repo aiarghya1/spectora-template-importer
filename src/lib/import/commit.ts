@@ -15,15 +15,13 @@ export type PreparedImport =
 
 /** Strips any directory part and control characters; keeps everything a person would type in a filename. */
 export function safeFilename(name: string): string {
-  const base = name.split(/[\\/]/).pop() ?? "";
-  const printable = Array.from(base)
-    .filter((char) => {
-      const code = char.codePointAt(0) ?? 0;
-      return code >= 32 && code !== 127;
-    })
-    .join("")
-    .trim();
-  return (printable || "upload").slice(0, 255);
+  const base = name.slice(Math.max(name.lastIndexOf("/"), name.lastIndexOf("\\")) + 1);
+  let printable = "";
+  for (const char of base) {
+    const code = char.codePointAt(0) as number; // a string iterator never yields empty strings
+    if (code >= 32 && code !== 127) printable += char;
+  }
+  return (printable.trim() || "upload").slice(0, 255);
 }
 
 export function prepareImport(filename: string, bytes: Uint8Array): PreparedImport {

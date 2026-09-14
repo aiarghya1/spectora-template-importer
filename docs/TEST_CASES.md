@@ -1,14 +1,14 @@
 # Test cases
 
 **Status (2026-09-14):**
-- **Unit and integration:** 229 automated tests, all passing locally and in a fresh-clone replay of CI.
+- **Unit and integration:** 352 automated tests across 46 files, all passing, with **100% line, statement, branch and function coverage** of `src/` (enforced in CI).
 - **End-to-end:** 5 Playwright tests written, **not yet run** (they need the Supabase project and a test account).
 - **Manual checks:** the checks against the real Spectora export and the deployment are **pending** (§4).
 
 | Layer | What "unit / integration / e2e" means here | Tests | Status |
 |---|---|---|---|
-| Unit | Pure logic (parser, sanitiser, verifier, file checks) and UI components in isolation (jsdom, actions mocked) | 121 | ✅ passing |
-| Integration | Server code wired together (actions, routes, auth, proxy, queries) against a recording fake Supabase client; pages composed with real components; **the real SQL migration** in PGlite | 108 | ✅ passing |
+| Unit | Pure logic (parser, sanitiser, verifier, file checks) and UI components in isolation (jsdom, actions mocked) | 195 | ✅ passing |
+| Integration | Server code wired together (actions, routes, auth, proxy, queries) against a recording fake Supabase client; pages composed with real components; **both SQL migrations** in PGlite | 157 | ✅ passing |
 | End-to-end | A real browser against the running app and a real Supabase database | 5 | ⏳ written, not run |
 | Manual / pending | Real Spectora export, seeded deployment | 6 | ⏳ not run |
 
@@ -16,8 +16,9 @@ Each row names the test file so it can be found. `(×n)` means one parameterised
 
 ## How to run
 ```bash
-npm test                                         # unit + integration (229)
-npm run test:coverage                            # same, with coverage limits (as CI)
+npm test                                         # unit + integration (352)
+npm run test:coverage                            # same, failing below 100% coverage (as CI)
+npm run test:all                                 # coverage + browser workflow; reads .env.local
 npx vitest run src/lib/import                    # one area
 E2E_EMAIL=… E2E_PASSWORD=… npm run test:e2e      # end-to-end against npm run dev (.env.local needed)
 E2E_BASE_URL=https://… E2E_EMAIL=… E2E_PASSWORD=… npm run test:e2e   # against a deployment
@@ -26,7 +27,7 @@ npm run verify:export -- fixtures/<file>         # preservation check on a real 
 
 ---
 
-## 1. Unit tests (121)
+## 1. Unit tests (195)
 
 ### 1.1 HTML sanitiser — `src/lib/html/__tests__/sanitize.test.ts` (14)
 | ID | Test case | Input | Expected result |
@@ -56,13 +57,13 @@ npm run verify:export -- fixtures/<file>         # preservation check on a real 
 | ID | Test case | Input | Expected result |
 |---|---|---|---|
 | UT-FIL-01 | Real spreadsheets accepted by content | Zip bytes `.xlsx`, OLE bytes `.XLS`, CSV with BOM | `ok` with kind `xlsx` / `xls` / `csv` |
-| UT-FIL-02 | Empty and oversized files rejected | 0 bytes; 4 MB + 1 byte | `empty_file`; `too_large` |
+| UT-FIL-02 | Empty and oversized files rejected | 0 bytes; 20 MB + 1 byte | `empty_file`; `too_large` |
 | UT-FIL-03 | Plain-text export explained | `InterNACHI.txt` | `plain_text_export` |
 | UT-FIL-04 | Other types rejected | `.pdf`; no extension | `unsupported_type` |
 | UT-FIL-05 | Renamed or corrupt files rejected | Text named `.xlsx`; zip named `.csv`; UTF-16 bytes named `.csv` | `content_mismatch` |
 | UT-FIL-06 | UTF-8 check on large files | Invalid byte inside the 64 KB sample; a valid `€` cut at the sample boundary | Invalid → `content_mismatch`; boundary → accepted |
 
-### 1.4 Spectora parser — `src/lib/import/__tests__/parse.test.ts` (21)
+### 1.4 Spectora parser — `src/lib/import/__tests__/parse.test.ts` (23)
 Every successful case also asserts **conservation**: filled cells = stored + read-only extras + reported.
 
 | ID | Test case | Input | Expected result |
@@ -71,7 +72,9 @@ Every successful case also asserts **conservation**: filled cells = stored + rea
 | UT-PAR-02 | Deterministic | Same bytes parsed twice | Deep-equal results |
 | UT-PAR-03 | Headers matched loosely | `COMMENT  TEXT`, `item name`, `Section_Name`, `comment name`, reordered | Mapped correctly |
 | UT-PAR-04 | Blank section/item cells fill down | Rows with blank Section and/or Item | Placed under the row above; `section_filled_down`, `item_filled_down` issues |
-| UT-PAR-05 | Non-contiguous section grouped | Roof, Exterior, Roof | Roof has both comments, Exterior after it; warning lists row 4 |
+| UT-PAR-05 | Repeated section name kept in order | Roof, Exterior, Roof | Three separate section runs in row order; warning lists row 4 |
+| UT-PAR-22 | Repeated item name kept in order | Coverings, Flashing, Coverings within Roof | Three separate item runs in row order; warning lists row 4 |
+| UT-PAR-23 | Adjacent declarations with reused names | Roof declaration after Roof; Coverings declaration after Coverings | Distinct sections/items with exact start rows and unchanged comment order |
 | UT-PAR-06 | Empty items and sections kept | Item-only row; section-only row | Item with 0 comments; section with 0 items; counters 1/1 |
 | UT-PAR-07 | Blank rows ignored but counted | Empty and whitespace-only rows | `blankRows: 2`; no effect on outline |
 | UT-PAR-08 | Only name edges trimmed | `"  Roof "`, comment title/text with spaces | Names trimmed and reported; title and text kept verbatim |
@@ -89,13 +92,15 @@ Every successful case also asserts **conservation**: filled cells = stored + rea
 | UT-PAR-20 | Damaged xlsx | File truncated to half | `unreadable` |
 | UT-PAR-21 | Zip bomb | Central directory claims ~2 GB uncompressed | `too_large_uncompressed`, before unpacking |
 
-### 1.5 Independent preservation verifier — `src/lib/import/__tests__/verify.test.ts` (4)
+### 1.5 Independent preservation verifier — `src/lib/import/__tests__/verify.test.ts` (6)
 | ID | Test case | Input | Expected result |
 |---|---|---|---|
-| UT-VER-01 | Accepts a faithful parse | Workbook with title row, skipped row, fill-down, item-only, section-only, blank and regrouped rows | 0 mismatches, 0 unaccounted rows; 7 data / 4 comment / 2 structure / 1 reported |
+| UT-VER-01 | Accepts a faithful parse | Workbook with title row, skipped row, fill-down, item-only, section-only, blank and a repeated section name | 0 mismatches, 0 unaccounted rows; 7 data / 4 comment / 2 structure / 1 reported |
 | UT-VER-02 | Catches a dropped comment | Last Roof comment removed from the result | Row 10 unaccounted |
 | UT-VER-03 | Catches altered content | Changed text, rewritten Category, two comments swapped | Mismatches on `text`, `Category`, `order` |
 | UT-VER-04 | Catches a misplaced comment | Comment moved from Coverings to Flashing | Row 4, field `item`: expected Coverings, got Flashing |
+| UT-VER-05 | Checks repeated-name runs and order | Repeated item and section names; tampered item order; merged runs | Faithful parse passes; reordered item and merged runs are flagged |
+| UT-VER-06 | Detects merged adjacent declarations | Same-name section-only and item-only declarations, then deliberate merges | Faithful parse passes; either merge produces a structural mismatch |
 
 ### 1.6 Import commit helpers — `src/lib/import/__tests__/commit.test.ts` (6)
 | ID | Test case | Input | Expected result |
@@ -183,12 +188,12 @@ Every successful case also asserts **conservation**: filled cells = stored + rea
 | UT-TRE-02 | Comment text on demand | Open a comment; open a plain-text comment | Body only rendered after opening; extras shown; line breaks kept |
 | UT-TRE-03 | Links don't leave the wizard | Click a link in a comment | Opens in a new tab with `noopener,noreferrer` |
 
-**ImportWizard** — `src/app/import/__tests__/import-wizard.test.tsx` (10)
+**ImportWizard** — `src/app/import/__tests__/import-wizard.test.tsx` (18)
 | ID | Test case | Steps | Expected result |
 |---|---|---|---|
 | UT-WIZ-01 | Wrong file explained | Upload `.txt` → server 422 | "That's the plain-text export", server message, "Nothing was imported."; request sent with `mode=preview` |
 | UT-WIZ-02 | Not a Spectora export | Server returns found headers | Title plus `Name · Price` |
-| UT-WIZ-03 | Too large | Upload a file over 4 MB | "The file is too large"; no request sent |
+| UT-WIZ-03 | Too large | Upload a file over 20 MB | "The file is too large"; no request sent |
 | UT-WIZ-04 | Network and server errors | Fetch rejects; then non-JSON 502 | "Connection problem"; "unexpected response" |
 | UT-WIZ-05 | Preview then commit | Upload → preview → rename → Import | 4 preview sections and skipped-rows banner; commit sends `mode=commit`, trimmed name, **same SHA-256 and file**; navigates to `/templates/t-new?imported=1` |
 | UT-WIZ-06 | Duplicate-file warning | Preview with a previous import | "You've imported this exact file before" with a link |
@@ -209,9 +214,100 @@ Every successful case also asserts **conservation**: filled cells = stored + rea
 | UT-EDI-07 | Error page | Error with digest; Try again | Reference shown; raw error text hidden; retry called |
 | UT-EDI-08 | Not-found page | Render | Heading and "Back to templates" link |
 
+### 1.8 Parser edge cases — `src/lib/import/__tests__/parse-edge.test.ts` (12)
+| ID | Test case | Input | Expected result |
+|---|---|---|---|
+| UT-PEX-01 | Spreadsheet library errors | Library throws "password-protected"; another error; a non-Error value | `password_protected`; `unreadable`; `unreadable` |
+| UT-PEX-02 | Workbook without usable sheets | No sheets; first sheet with no range | `no_sheets`; `empty_sheet` naming the sheet |
+| UT-PEX-03 | Empty extra sheet | Second sheet with no content | No `extra_sheet_ignored` issue |
+| UT-PEX-04 | Date cells | A date in "Last Modified" | Stored as an ISO timestamp |
+| UT-PEX-05 | Data wider than the header row | 4 headers, 5 values | Fifth value kept as `Column E` |
+| UT-PEX-06 | Long values in skipped rows | Skipped row with a 2,500-character title and an extra column | Detail value clipped with `… [truncated]`; extra value keyed by column name |
+| UT-PEX-07 | Non-numeric Order values | Order `first`, 2, 1 | `first` kept as data; only the real 2 → 1 disagreement reported |
+| UT-PEX-08 | Cosmetic-only HTML changes | `<font>` only | `html_sanitized` issue is a note, not a warning |
+| UT-PEX-09 | Sheet with no content | One empty cell | `missing_required_columns` with no found headers |
+| UT-PEX-10 | Row limit | 50,001 data rows (CSV) | `too_many_rows` |
+| UT-PEX-11 | Issue and row-list caps | 2,001 rows needing fill-down and cleaning | Grouped issue lists 200 rows with a count of 2,000; 2,000 row issues plus `issues_truncated` (1 suppressed) |
+| UT-PEX-12 | Template name from filename | Windows path; `.xlsx` only; 250-character name | `InterNACHI`; `Imported template`; 200 characters |
+
+### 1.9 Column planning — `src/lib/import/__tests__/columns.test.ts` (4)
+| ID | Test case | Input | Expected result |
+|---|---|---|---|
+| UT-COL-01 | Header normalisation and detection | `Order (w/i item)`; alias headers; title row above headers | `orderwiitem`; first occurrence of each field; header row index 1, or -1 when absent |
+| UT-COL-02 | Column letters | Indexes 0, 25, 26, 51, 701, 702 | A, Z, AA, AZ, ZZ, AAA |
+| UT-COL-03 | Columns beyond the header | 2 headers, width 4, starting at column C | `Column E`, `Column F` extras |
+| UT-COL-04 | Known Spectora columns and duplicates | Photo caption, Uses, duplicate Item Name, duplicate Uses | Notes attached; duplicates suffixed with their column letter |
+
+### 1.10 Zip-bomb guard — `src/lib/import/__tests__/zip-guard.test.ts` (4)
+| ID | Test case | Input | Expected result |
+|---|---|---|---|
+| UT-ZIP-01 | Real xlsx | Generated workbook | Finite declared size |
+| UT-ZIP-02 | Not a zip | CSV text | `null` |
+| UT-ZIP-03 | Zip64 markers | Entry count 0xFFFF; directory offset 0xFFFFFFFF; entry size 0xFFFFFFFF | `Infinity` for each |
+| UT-ZIP-04 | Broken central directory | Offset pointing at a local header; offset past the end | `null` |
+
+### 1.11 Verifier edge cases — `src/lib/import/__tests__/verify-edge.test.ts` (6)
+| ID | Test case | Input | Expected result |
+|---|---|---|---|
+| UT-VEX-01 | CSV without a type column | CSV export | No mismatches |
+| UT-VEX-02 | Date cells | xlsx with a date | No mismatches |
+| UT-VEX-03 | Every comment-field discrepancy | Renamed section, changed title and types, removed and invented extras, sections reordered | Mismatches on section, title, type (both directions), `Category` (missing), extras count, section order |
+| UT-VEX-04 | Structure-row discrepancies | Item-only and section-only rows removed from the result | `item` and `section` mismatches marked "(missing)" |
+| UT-VEX-05 | Mismatch cap | 250 altered titles | 200 listed |
+| UT-VEX-06 | Row neither imported nor reported | Skipped row's issue removed from the result | Row 3 unaccounted |
+
+### 1.12 Sanitiser edge cases — `src/lib/html/__tests__/sanitize-edge.test.ts` (9)
+| ID | Test case | Input | Expected result |
+|---|---|---|---|
+| UT-SEX-01 | Other media elements | `<object data>`, `<source srcset>`, `<video>` without a source | Each reported with its source (or empty) |
+| UT-SEX-02 | Malformed style | `style="color; ;font-weight:bold"` | Only `color` reported; the empty declaration is ignored |
+| UT-SEX-03 (×6) | Which changes are significant | One change of each kind | Media, dropped tag, unsafe link → significant; unwrap, attribute, style → not |
+| UT-SEX-04 | Every change described | Embed without source, dropped tag ×2, attribute, style ×3, unsafe link | One exact plain-language sentence |
+
+### 1.13 Component interactions — `src/components/__tests__/interactions.test.tsx` (12)
+| ID | Test case | Steps | Expected result |
+|---|---|---|---|
+| UT-INT-01 | "Saved" confirmation clears | Save, advance 2 s | "Saved" disappears |
+| UT-INT-02 | Timer during a second save | Save, start another pending save, advance 2 s | "Saving…" still shown |
+| UT-INT-03 | Blur arriving with Esc | Esc and blur in one update | No save |
+| UT-INT-04 | **Edit after an earlier Esc** | Esc; reopen; type; click away | Saves the new name (regression test for a fixed bug) |
+| UT-INT-05 | Dialogs close without acting | Cancel and Esc in the duplicate and delete dialogs; small and medium sizes | Dialogs close; no action called; size classes applied |
+| UT-INT-06 | Add comment form | Cancel; then add "Loose flashing" | Nothing added on Cancel; then `addComment` called |
+| UT-INT-07 | Banner layouts | Title only; body only (error); both | No empty body element; alert role; spacing when both |
+| UT-INT-08 | Badge and type colours | Default badge; Deficiency, limit, Information, Maintenance, null | Neutral default; red, amber, sky, neutral, neutral |
+| UT-INT-09 | Leave-page warning | Before editing; after editing; after cancelling | Not prevented; prevented; not prevented |
+| UT-INT-10 | ⌘S guards | ⌘S with no changes; ⌘S twice while saving | No save; one save |
+| UT-INT-11 | Mode tabs | Click the current tab; confirm switch to Visual | Nothing happens; Visual editor opens |
+| UT-INT-12 | Saving visual-editor edits | Toggle a bulleted list, Save | Saved HTML is the list |
+
+### 1.14 Import UI edge cases — `src/components/import/__tests__/import-ui-edge.test.tsx` (4)
+| ID | Test case | Input | Expected result |
+|---|---|---|---|
+| UT-IUE-01 | Column table labels | Mapped, known, unknown, unlabelled and empty unlabelled columns | 4 rows shown; correct labels; "(no header)"; empty unlabelled column hidden |
+| UT-IUE-02 | Issue details | Array values; empty values; 45 rows with 40 listed; rows without count | "Cell 1"; no empty details; "… and 15 more"; row list; All/Note filters |
+| UT-IUE-03 | Inconsistent totals | 0 filled cells but 5 stored | Tooltip "(0.0%)"; mismatch warning; no division by zero |
+| UT-IUE-04 | Tree preview clicks | Click plain text; open an empty comment | No new tab; "No comment text" |
+
+### 1.15 Import wizard edge cases — `src/app/import/__tests__/import-wizard-edge.test.tsx` (6)
+| ID | Test case | Steps | Expected result |
+|---|---|---|---|
+| UT-WZE-01 | Drop zone | Drag over, drag leave, drop no files, choose no file | Highlight on and off; no request |
+| UT-WZE-02 | Reading state | Upload with a pending response | File name shown; picker disabled |
+| UT-WZE-03 | Platform 413 | Non-JSON 413 | "The file is too large" / "The file is larger than 20 MB." |
+| UT-WZE-04 | Nothing importable | 422 with row and file-level reasons | "Nothing could be imported"; "Row 3: …"; file-level reason |
+| UT-WZE-05 | Unknown error code | 400 with `something_new` | "The import didn't work" |
+| UT-WZE-06 | Deleted earlier import | Previous import whose template is gone | "(that template has since been deleted)" |
+
+### 1.16 Failure branches — `src/components/__tests__/failure-branches.test.tsx` (3)
+| ID | Test case | Steps | Expected result |
+|---|---|---|---|
+| UT-FBR-01 | Failed section rename | Conflict, then retry | Both calls use version 5 |
+| UT-FBR-02 | Failed template rename | Conflict, then retry | Both calls use version 2 |
+| UT-FBR-03 | Successful duplicate/delete | Actions return nothing (redirect) | No error shown |
+
 ---
 
-## 2. Integration tests (108)
+## 2. Integration tests (157)
 
 ### 2.1 Template server actions — `src/app/templates/__tests__/actions.test.ts` (27)
 | ID | Test case | Input / setup | Expected result |
@@ -250,7 +346,7 @@ Every successful case also asserts **conservation**: filled cells = stored + rea
 | IT-AUTH-08 | Sign-up rejected | "User already registered" | That message shown |
 | IT-AUTH-09 | Sign out | — | Session ended; redirect `/login` |
 
-### 2.3 Upload API — `src/app/api/import/__tests__/route.test.ts` (12)
+### 2.3 Upload API — `src/app/api/import/__tests__/route.test.ts` (19)
 | ID | Test case | Request | Expected result |
 |---|---|---|---|
 | IT-API-01 | Signed out | Valid upload, no session | 401 `unauthenticated` |
@@ -272,7 +368,7 @@ Every successful case also asserts **conservation**: filled cells = stored + rea
 | IT-CNF-02 | Invalid or expired link | Verification error | 307 → `/login?error=confirm` |
 | IT-CNF-03 | Missing parameters | `?type=email` | Supabase not called; → `/login?error=confirm` |
 
-### 2.5 Auth proxy and configuration — `src/__tests__/proxy.test.ts` (5)
+### 2.5 Auth proxy and configuration — `src/__tests__/proxy.test.ts` (6)
 | ID | Test case | Request | Expected result |
 |---|---|---|---|
 | IT-PRX-01 | Signed-out page request | `/templates/123` | 307 → `/login?next=%2Ftemplates%2F123` |
@@ -280,8 +376,9 @@ Every successful case also asserts **conservation**: filled cells = stored + rea
 | IT-PRX-03 | Allowed through | `/login`, `/auth/confirm` signed out; `/templates` signed in | Passed through |
 | IT-PRX-04 | Session refresh | Supabase refreshes the cookie | Refreshed cookie set on the response |
 | IT-PRX-05 | Missing configuration | No Supabase URL | Error telling you to copy `.env.example` |
+| IT-PRX-06 | Request cookies passed to Supabase | Request with `sb-session=abc` | Supabase sees `[{ name: "sb-session", value: "abc" }]` |
 
-### 2.6 Database queries — `src/lib/templates/__tests__/queries.test.ts` (12)
+### 2.6 Database queries — `src/lib/templates/__tests__/queries.test.ts` (14)
 | ID | Test case | Setup | Expected result |
 |---|---|---|---|
 | IT-QRY-01 | Template list | Two rows, one with missing counts | Counts mapped (missing → 0); newest first |
@@ -304,7 +401,7 @@ Every successful case also asserts **conservation**: filled cells = stored + rea
 | IT-CLI-02 | Server client cookies | Reads the request's cookies and writes updates |
 | IT-CLI-03 | Read-only cookies | Writing cookies during a Server Component render doesn't throw |
 
-### 2.8 Pages — `src/app/__tests__/pages.test.tsx` (8), `src/app/templates/[id]/__tests__/page.test.tsx` (5), `src/app/templates/[id]/report/__tests__/page.test.tsx` (5)
+### 2.8 Pages — `src/app/__tests__/pages.test.tsx` (8), `src/app/templates/[id]/__tests__/page.test.tsx` (6), `src/app/templates/[id]/report/__tests__/page.test.tsx` (5)
 | ID | Test case | Setup / steps | Expected result |
 |---|---|---|---|
 | IT-PAG-01 | Home | Latest template exists; none | Redirect `/templates/t1`; `/templates` |
@@ -325,8 +422,9 @@ Every successful case also asserts **conservation**: filled cells = stored + rea
 | IT-PAG-16 | Original deleted | Original is null | "…that template has since been deleted" |
 | IT-PAG-17 | Report on the original, no stats | No copy; empty summary | No copy banner; no reconciliation; sheet "—" |
 | IT-PAG-18 | No report / missing template | No report; template null | "No import report for this template"; 404 |
+| IT-PAG-19 | Unreadable section | Section content query returns null | Treated as an empty section |
 
-### 2.9 Database — real migration in PGlite — `supabase/tests/schema.test.ts` (14), `supabase/tests/pipeline.test.ts` (2)
+### 2.9 Database — real migrations in PGlite — `supabase/tests/schema.test.ts` (15), `supabase/tests/pipeline.test.ts` (2)
 | ID | Test case | Steps | Expected result |
 |---|---|---|---|
 | IT-DB-01 | Import stores the hierarchy in order | `import_template` with 2 sections | Exact rows in order, including an item with no comments |
@@ -346,6 +444,73 @@ Every successful case also asserts **conservation**: filled cells = stored + rea
 | IT-DB-15 | **End-to-end preservation (no browser)** | Real xlsx → parser → `import_template` → read back; duplicate; edit the copy | Stored tree **equals parser output** field for field (colour span, extras, empty item, escaped text); all issues persisted; copy identical; original still equals parser output after editing the copy |
 | IT-DB-16 | Optimistic concurrency | Two updates with the same expected version | 1 row, then 0 rows |
 
+### 2.10 Query edge cases — `src/lib/templates/__tests__/queries-edge.test.ts` (11)
+| ID | Test case | Setup | Expected result |
+|---|---|---|---|
+| IT-QRE-01 | Missing rows | Null data for list and section queries | Empty lists |
+| IT-QRE-02 | Copy of a deleted original | Source template lookup returns null; no sections | `copiedFrom: null`, `sections: []` |
+| IT-QRE-03 | Comments with missing fields | Null comment list; missing type, row and extras | `[]`; `null`, `null`, `{}` |
+| IT-QRE-04 | Sparse import report | No summary, issues or comments | `summary: {}`, `issues: []` |
+| IT-QRE-05 | Import record gone | Imports query returns null | `null` |
+| IT-QRE-06 | Original template | `copied_from_id` null | No second template query |
+| IT-QRE-07 | Comment without a readable item | `items: null`; `source_row: null` | Issue not linked |
+| IT-QRE-08 (×2) | getTemplate errors | Template row fails; sections fail | Error thrown |
+| IT-QRE-09 | getSectionContent error | Query fails | Error thrown |
+| IT-QRE-10 | getImportReport error | Imports query fails | Error thrown |
+
+### 2.11 Action failure paths — `src/app/templates/__tests__/actions-edge.test.ts` (9)
+| ID | Test case | Input | Expected result |
+|---|---|---|---|
+| IT-ACE-01 (×3) | Invalid add input | Empty section name; bad section id; 1,001-character comment title | `invalid`; no database client created |
+| IT-ACE-02 (×3) | Database errors | deleteNode, moveNode, deleteTemplate fail with `XX000` | Generic `failed`; no page refresh |
+| IT-ACE-03 | Conflicts change nothing | Template, section and comment updates conflict | No refresh; no extra template "touch" |
+| IT-ACE-04 | Failed adds change nothing | Insert fails for section, item, comment | No template touch; no refresh |
+| IT-ACE-05 | Row vanished after a move | Template lookup after move returns null | `ok`; no refresh |
+
+### 2.12 Login edge cases — `src/app/login/__tests__/login-edge.test.tsx` (3)
+| ID | Test case | Input | Expected result |
+|---|---|---|---|
+| IT-LGE-01 | Form without an email field | Password only | "Enter a valid email address." with `email: ""` |
+| IT-LGE-02 | No Origin header | Sign-up request | Confirmation link `/auth/confirm` |
+| IT-LGE-03 | Switch back to sign-in | Toggle twice | "Sign in" button |
+
+### 2.13 Root layout — `src/app/__tests__/layout.test.tsx` (2)
+| ID | Test case | Expected result |
+|---|---|---|
+| IT-LAY-01 | Page chrome | `<html lang="en">` with both font variables; `<body>` wraps the page content |
+| IT-LAY-02 | Metadata | App title and description |
+
+---
+
+### 2.14 Large-import, pagination and cleanup cases
+
+| ID | Test file | Case and expected result |
+|---|---|---|
+| UT-STG-01 | `src/lib/import/__tests__/staging.test.ts` | Private path contains the signed-in owner and a fresh UUID; foreign, malformed and mismatched-extension paths fail. |
+| UT-TUS-01 | `src/lib/import/__tests__/staged-upload.test.ts` | Direct TUS upload uses the Storage host, 6 MB chunks and the user's bearer token; progress, failure and cleanup are handled. |
+| UT-PRE-01 | `src/lib/import/__tests__/preview.test.ts` | Oversized preview response is bounded without mutating the parsed result; exact totals remain available. |
+| UT-CLN-01 | `src/lib/import/__tests__/cleanup-staging.test.ts` | Daily retention lists multiple pages before deleting, skips recent and malformed objects, and surfaces Storage failures. |
+| IT-STG-01 | `src/app/api/import/__tests__/route.test.ts` | Staged import rejects foreign, missing, oversized or changed files; commit removes a successful source, with cleanup failures logged. |
+| IT-WIZ-01 | `src/app/import/__tests__/import-wizard.test.tsx` | Large files stage once, preview and commit by path, show progress and sample messaging, and clean up on reset/error/stale selection. |
+| IT-PAG-01 | `src/lib/templates/__tests__/queries.test.ts` | More than 1,000 sections, items and comments are fetched in order rather than silently cut off. |
+| IT-RLS-01 | `supabase/tests/schema.test.ts` | Staging bucket is private with a 20 MB cap; owner policies reject foreign paths and invalid extensions. |
+| IT-CRN-01 | `src/app/api/cron/cleanup-imports/__tests__/route.test.ts` | Missing or wrong cron token cannot delete; missing server secrets fail closed; successful and failed runs report their status. |
+
+The table above groups related assertions; the test files are the executable source of truth for every case.
+
+## Coverage
+Measured with V8 over every file in `src/`.
+
+| Run | Tests | Lines | Statements | Branches | Functions |
+|---|---|---|---|---|---|
+| Unit only | 195 (28 files) | not remeasured separately | | | |
+| Integration only | 157 (18 files) | not remeasured separately | | | |
+| **Combined — enforced in CI** | **352 (46 files)** | **100%** (1,315/1,315) | **100%** (1,536/1,536) | **100%** (1,168/1,168) | **100%** (333/333) |
+| End-to-end | 5 | not measured (not yet run; browser coverage isn't collected) | | | |
+
+- **Why separate-layer percentages are omitted:** the layers target different code, and this change was verified with the combined coverage gate. The separate runs need remeasurement before reporting a percentage.
+- **No ignore comments:** no `/* v8 ignore */` or similar is used anywhere. Where a branch could never run, the code was removed. Examples: fallbacks for values the spreadsheet library always provides, and a dead input reset in the wizard.
+
 ---
 
 ## 3. End-to-end tests — `e2e/workflow.spec.ts` (5, Playwright) ⏳ written, not yet run
@@ -357,7 +522,7 @@ Every successful case also asserts **conservation**: filled cells = stored + rea
 - Tests run in order in one signed-in browser.
 - The test spreadsheet is generated inside the test, so it doesn't depend on the committed fixture.
 - Every template created is deleted afterwards.
-- Without credentials, the whole file is skipped.
+- Without credentials, Playwright fails during configuration so a skipped suite cannot appear green.
 
 | ID | Test case | Steps | Expected result |
 |---|---|---|---|
@@ -391,7 +556,7 @@ Every successful case also asserts **conservation**: filled cells = stored + rea
 | Stored in a real backend, still there after reopening | IT-DB-01…16, IT-QRY-01…12, E2E-03 (reload) |
 | Structured, explainable schema (no opaque blob) | IT-DB-01, IT-DB-12, IT-DB-15 |
 | Formatting, links and rich content | UT-SAN-01…14, UT-EDC-01…02, UT-CMT-04…07, UT-RTE-02…04, IT-QRY-07, IT-QRY-09, E2E-02 |
-| At least one failure case handled | UT-FIL-02…06, UT-PAR-17…21, UT-WIZ-01…04, UT-WIZ-07…08, IT-API-01…05, IT-API-07, IT-API-10…11, IT-DB-03, E2E-01 |
+| At least one failure case handled | UT-FIL-02…06, UT-PAR-17…21, UT-PEX-01…02, UT-PEX-09…10, UT-ZIP-02…04, UT-WIZ-01…04, UT-WIZ-07…08, UT-WZE-03…05, IT-API-01…05, IT-API-07, IT-API-10…11, IT-ACE-01…02, IT-QRE-08…10, IT-DB-03, E2E-01 |
 | Security (access control, input handling) | IT-DB-05, IT-DB-08, IT-DB-10…12, IT-DB-14, IT-AUTH-01…04, IT-PRX-01…02, IT-ACT-01, IT-API-11, UT-SAN-04…08, UT-SAN-14 |
 
 ## 6. Defects found by these tests (fixed)
@@ -401,4 +566,5 @@ Every successful case also asserts **conservation**: filled cells = stored + rea
 | UT-EDT-07 | Enter then blur could save twice, producing a false "changed elsewhere" conflict | Only one save can be in flight at a time |
 | IT-PAG-08 | A failed sign-in cleared the email field (React 19 resets forms after an action) | Action returns the email; field is pre-filled from it |
 | UT-RTE-02 | Visual editor stored a trailing empty `<p></p>` after lists | Trailing empty paragraphs stripped from editor output |
+| UT-INT-04 | After pressing Esc on a rename, the next rename was silently discarded when you clicked away | The Esc flag is cleared whenever editing starts |
 | UT-VER-01 (while writing it) | — (the test itself was wrong about fill-down; the parser was right) | Test corrected |

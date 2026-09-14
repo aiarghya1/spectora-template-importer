@@ -24,7 +24,8 @@
 is *"what did I lose?"* A silent importer, even a good one, can't answer that.
 
 **What I built.**
-- **A preview before anything is saved.** It shows what will be created, the column mapping, and the full issue list.
+- **A preview before anything is saved.** It shows what will be created and the column mapping. For large exports,
+  exact totals accompany a sample of the tree and issues; the full issue list is in the saved import report.
 - **A cell-by-cell reconciliation.** Every filled cell in the file is either imported, kept as read-only data, or listed as an issue. The UI shows the three totals adding up.
 - **Grouped issues.** They are split into *missing from the export*, *not editable here*, *formatting changed*, and *rows & grouping*. Each has a row number, the original values, and a link to the comment in the editor.
 - **An import report kept with the template (and its copies).** It includes the file's SHA-256 fingerprint, and warns when the same file has already been imported.
@@ -67,7 +68,7 @@ is *"what did I lose?"* A silent importer, even a good one, can't answer that.
 - **Unverified:** column handling follows Spectora's published spreadsheet spec. **[TODO before submitting]** Confirm or correct this against the committed export (`npm run verify:export`).
 
 ## Failure cases handled
-- Wrong file type, a renamed or corrupt file, an empty file, over 4 MB, password-protected, or a zip bomb.
+- Wrong file type, a renamed or corrupt file, an empty file, over 20 MB, password-protected, or a zip bomb.
 - **Spectora's plain-text export:** detected by name, with instructions to use the HTML-text export instead.
 - **Not a Spectora export:** a missing Section/Item header is rejected, showing the headers that were found.
 - **Rows that can't be placed**, or values too long to store: those rows are skipped, the rest imports, and each skipped row appears with its values.
@@ -79,22 +80,29 @@ is *"what did I lose?"* A silent importer, even a good one, can't answer that.
 - **Deleted or foreign template:** a not-found page. **Database outage:** an error page with retry.
 
 ## How I checked my work
-- **Automated tests: 229 across 28 files**, all passing (`npm run test:coverage`, run in CI with coverage limits):
+- **Automated tests: 352 across 46 files**, all passing (`npm run test:coverage`, run in CI, failing below 100% coverage). Catalogue with IDs, inputs and expected results: `docs/TEST_CASES.md`.
 
   | Layer | What it covers |
   |---|---|
   | Unit | parser, HTML cleaner, independent preservation verifier, file checks, commit helpers, editor-compatibility check |
   | Server | every server action (validation, edit conflict vs not found, database error mapping, position retry), upload route (401/413/400/409/422/429/500), login and sign-up (no open redirects, no account enumeration), email confirmation, auth proxy, paginated queries, Supabase cookie handling. Uses a small fake Supabase client that records each query. |
   | Component (jsdom) | import wizard (failures, preview, commit with fingerprint, stale response ignored), comment editor (HTML mode protects formatting, save/conflict/⌘S/unsaved guard), rename, add/move/delete dialogs, issue list, reconciliation, tree preview, visual-editor toolbar, all pages |
-  | Database (PGlite, real migration) | atomic import, order, parser output = stored rows, copy independence, RLS isolation, cross-template FK, reordering, stale versions, quota and rate limit |
-  | End-to-end (Playwright) | 5 browser scenarios: bad files → preview → import → edit → reload → duplicate → edit copy → original unchanged → report. **Written but not yet run:** needs the Supabase project and a test account; skips itself until `E2E_EMAIL`/`E2E_PASSWORD` are set. |
+  | Database (PGlite, real migrations) | atomic import, order, parser output = stored rows, copy independence, RLS isolation, cross-template FK, reordering, stale versions, quota, rate limit, private Storage owner policies |
+  | End-to-end (Playwright) | 5 browser scenarios: bad files → preview → import → edit → reload → duplicate → edit copy → original unchanged → report. **Written but not yet run:** the local dev server timed out before a scenario could start. |
 
-- **Coverage (V8, all of `src/`):** 97.4% lines · 95.1% statements · 87.8% branches · 94.5% functions. The only uncovered file is `layout.tsx` (static markup). CI fails if coverage drops, and server actions and the upload route are held at 100%.
+  A confirmed test account now exists in the `test` project. A local Playwright run was attempted, but the
+  sandboxed Next dev server never opened its port; Playwright timed out before any scenario ran.
+
+- **Coverage (V8, all of `src/`):** 100% lines, statements, branches and functions, enforced in CI.
+  - Unit and integration tests target different code; separate-layer coverage needs remeasurement after the grouping change.
+  - **End-to-end:** not measured yet.
+  - **No ignore comments:** unreachable fallbacks were deleted instead.
 - **Bugs the tests caught and I fixed:**
   - `safeFilename` stripped spaces and punctuation from filenames.
   - Rename could save twice (Enter disables the field, which blurs it), causing a false "changed elsewhere" conflict.
   - A failed sign-in wiped the email field (React 19 resets forms after an action).
   - The visual editor saved a stray `<p></p>` after lists.
+  - After pressing Esc on a rename, the next rename was silently discarded when you clicked away.
 - **Original unit and database checks in detail:**
   - **Parser:** hierarchy, order, fill-down, non-contiguous grouping, unknown/duplicate columns, CSV quoting/BOM, over-long values, damaged xlsx, zip bomb, determinism. Conservation is asserted in each case.
   - **Cleaner:** allowlist, XSS vectors, style filtering, media reporting.
@@ -121,18 +129,20 @@ is *"what did I lose?"* A silent importer, even a good one, can't answer that.
 - **Security:**
   - Row-level security on every table.
   - Database functions run as the signed-in user, so its permissions still apply.
-  - The service-role key is used only by the seed script.
+  - The service-role key is used only server-side by the seed script and secret-protected cleanup cron.
   - Server actions and the upload route validate all input with zod.
   - Redirects after login only go to pages within the app.
   - Login errors don't reveal whether an account exists.
-- **Upload hardening:** size cap, content sniffing, zip-bomb guard, row cap, and parsing only on the server.
+- **Upload hardening:** 4 MB direct / 20 MB private staged cap, content sniffing, zip-bomb guard, row cap,
+  server-only parsing, owner-only Storage policies, and daily cleanup of abandoned staged objects.
 - **Performance:**
   - Import and copy are each one database call.
   - The editor loads one section at a time.
   - Only one comment editor is open at a time.
   - Comment bodies in the preview render only when opened.
   - Reads that can exceed Supabase's 1,000-row limit are paginated.
-- **Scale:** preview and commit keep no server state, so any instance can serve either step.
+- **Scale:** preview and commit keep no in-process state, so any instance can serve either step. Large imports
+  use temporary private Storage objects that are deleted after commit or after 24 hours by the cron.
 
 ## What I cut, and why
 - **Drag-and-drop reordering:** up/down buttons are reliable and accessible; drag-and-drop is polish.
@@ -144,10 +154,12 @@ is *"what did I lose?"* A silent importer, even a good one, can't answer that.
 
 ## Known limitations
 - Only the first sheet is read; other sheets are reported.
-- Items with the same name in the same section are merged, because the export can't tell them apart.
+- Consecutive rows with the same section/item name form one run. If a name returns after another, it starts a
+  separate section/item to preserve row order, and the import report flags the ambiguity for review.
 - **Order column:** if it disagrees with row order, row order wins and a warning is shown.
 - Rows over the length limits are skipped rather than stored.
-- **Upload size:** capped at 4 MB, because of Vercel's request-body limit.
+- **Upload size:** capped at 20 MB. Files above 4 MB use private, resumable Storage upload because of Vercel's
+  request-body limit. Large previews show a bounded sample, with the full report available after commit.
 - **Zip-bomb guard:** it relies on the sizes the zip file declares.
 
 ## AI usage

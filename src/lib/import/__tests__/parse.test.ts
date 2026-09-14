@@ -96,7 +96,7 @@ describe("parseSpectoraExport — structure", () => {
     expectConservation(result);
   });
 
-  it("groups non-contiguous sections under first appearance and warns", () => {
+  it("keeps repeated section names as separate runs in spreadsheet order and warns", () => {
     const result = ok(
       parseXlsx([
         HEADERS,
@@ -106,11 +106,47 @@ describe("parseSpectoraExport — structure", () => {
       ]),
     );
     expect(outline(result)).toEqual([
-      ["Roof", [["Coverings", ["A", "C"]]]],
+      ["Roof", [["Coverings", ["A"]]]],
       ["Exterior", [["Siding", ["B"]]]],
+      ["Roof", [["Coverings", ["C"]]]],
     ]);
     const issue = result.issues.find((i) => i.code === "section_not_contiguous");
     expect(issue).toMatchObject({ severity: "warning", detail: { count: 1, rows: [4] } });
+    expectConservation(result);
+  });
+
+  it("keeps repeated item names as separate runs within a section", () => {
+    const result = ok(parseXlsx([
+      HEADERS,
+      ["Roof", "Coverings", "A", "a"],
+      ["Roof", "Flashing", "B", "b"],
+      ["Roof", "Coverings", "C", "c"],
+    ]));
+    expect(outline(result)).toEqual([
+      ["Roof", [["Coverings", ["A"]], ["Flashing", ["B"]], ["Coverings", ["C"]]]],
+    ]);
+    expect(result.issues.find((i) => i.code === "item_not_contiguous")).toMatchObject({
+      severity: "warning", detail: { count: 1, rows: [4] },
+    });
+    expectConservation(result);
+  });
+
+  it("keeps explicit adjacent declarations with reused names separate", () => {
+    const result = ok(parseXlsx([
+      HEADERS,
+      ["Roof", "Coverings", "First", "a"],
+      ["Roof"],
+      ["Roof", "Coverings", "Second", "b"],
+      ["Roof", "Coverings"],
+      ["Roof", "Coverings", "Third", "c"],
+    ]));
+    expect(outline(result)).toEqual([
+      ["Roof", [["Coverings", ["First"]]]],
+      ["Roof", [["Coverings", ["Second"]], ["Coverings", ["Third"]]]],
+    ]);
+    expect(result.sections.map((section) => section.source_row)).toEqual([2, 3]);
+    expect(result.sections[1].items.map((item) => item.source_row)).toEqual([4, 5]);
+    expectConservation(result);
   });
 
   it("keeps items with no comments and sections with no items", () => {

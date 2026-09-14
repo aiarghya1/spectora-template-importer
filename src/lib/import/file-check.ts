@@ -2,7 +2,10 @@
  * First gate for uploads, before any parsing. Pure: bytes + filename in, verdict out.
  * Checks size and real content type (magic bytes), not just the extension.
  */
-export const MAX_UPLOAD_BYTES = 4 * 1024 * 1024; // Vercel function body limit is 4.5 MB
+// Vercel functions accept at most 4.5 MB per request. Larger files use private
+// Supabase Storage staging, so the application cap can be higher than that.
+export const MAX_DIRECT_UPLOAD_BYTES = 4 * 1024 * 1024;
+export const MAX_UPLOAD_BYTES = 20 * 1024 * 1024;
 
 export type FileKind = "xlsx" | "xls" | "csv";
 
@@ -50,7 +53,7 @@ export function checkUpload(filename: string, bytes: Uint8Array): FileCheckResul
     return {
       ok: false,
       code: "too_large",
-      message: `The file is ${(bytes.length / 1024 / 1024).toFixed(1)} MB; the limit is 4 MB.`,
+      message: `The file is ${(bytes.length / 1024 / 1024).toFixed(1)} MB; the limit is 20 MB.`,
     };
   }
 

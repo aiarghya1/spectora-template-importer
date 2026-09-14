@@ -18,8 +18,7 @@ export function Dialog({
   const titleId = useId();
 
   useEffect(() => {
-    const dialog = ref.current;
-    if (!dialog) return;
+    const dialog = ref.current as HTMLDialogElement; // effects run after the ref is attached
     if (open && !dialog.open) dialog.showModal();
     if (!open && dialog.open) dialog.close();
   }, [open]);

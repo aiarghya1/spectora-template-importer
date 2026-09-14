@@ -16,8 +16,9 @@ Read this before touching anything under `src/lib/import/`.
 7. **Missing vs unsupported.** Issues are tagged `missing_in_export` (data not present in the file)
    or `unsupported` (present but not modelled), never mixed.
 8. **Determinism.** Same file bytes ⇒ identical parse result (checked via sha256 + snapshot).
-9. **Grouping is reported.** Blank section/item cells fill down from the row above; rows for a section
-   or item that already appeared earlier are grouped under its first appearance. Both are reported with
-   row numbers. Rows that can't be placed (no section/item above) are skipped as `error` issues that carry
-   the row's values.
+9. **Grouping is reported.** Blank section/item cells fill down from the row above. A section or item name
+   repeated after a different name starts a new run. An explicit section-only or item-only declaration starts
+   a new group even when its name matches the adjacent group. The ambiguity is reported with row numbers.
+   Rows that can't be placed (no section/item above) are skipped as `error` issues that
+   carry the row's values.
 10. **Never truncate.** A value too long to store skips its row with an error; it is not silently cut.

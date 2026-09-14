@@ -30,5 +30,6 @@ Web app: import a Spectora "Export HTML Text" spreadsheet, edit it, duplicate it
 - Components/pages: add `// @vitest-environment jsdom`; reuse `src/test/next-mocks.tsx` (`linkModule`,
   `redirectTo`, `notFoundSignal`, `actionSpies`). Async Server Components: `render(await Page({ params: Promise.resolve(...) }))`.
 - `src/test/setup.ts` provides jest-dom matchers, `<dialog>` and ProseMirror layout shims.
-- Coverage limits live in `vitest.config.mts`; raise them when coverage rises, never lower them to pass.
+- Coverage is enforced at 100% (lines, statements, branches, functions) in `vitest.config.mts`. New code needs tests;
+  delete unreachable code rather than adding coverage-ignore comments. Update `docs/TEST_CASES.md` when adding tests.
 - End-to-end: `e2e/workflow.spec.ts` (Playwright) creates its own spreadsheet and deletes what it creates.

@@ -8,7 +8,7 @@ import * as XLSX from "xlsx";
 import { htmlToText } from "../html/sanitize";
 import { findHeaderRow, planColumns } from "./columns";
 import type { FileKind } from "./file-check";
-import type { ParsedComment, ParseSuccess } from "./types";
+import type { ParsedComment, ParsedItem, ParsedSection, ParseSuccess } from "./types";
 
 export interface Mismatch {
   row: number;
@@ -39,13 +39,14 @@ export function verifyPreservation(bytes: Uint8Array, kind: FileKind, parse: Par
       ? XLSX.read(new TextDecoder().decode(bytes).replace(/^﻿/, ""), { type: "string", raw: true, dense: true })
       : XLSX.read(bytes, { type: "array", dense: true, cellDates: true });
   const sheet = workbook.Sheets[workbook.SheetNames[0]];
-  const range = XLSX.utils.decode_range(sheet["!ref"] ?? "A1");
+  // Only called with a successful parse of these bytes, so the sheet has a range and a header row.
+  const range = XLSX.utils.decode_range(sheet["!ref"] as string);
   const rows = XLSX.utils
     .sheet_to_json<unknown[]>(sheet, { header: 1, raw: true, defval: null, blankrows: true })
-    .map((r) => (Array.isArray(r) ? r.map(toText) : []));
+    .map((r) => r.map(toText));
   const headerIndex = findHeaderRow(rows.slice(0, 20));
   const width = rows.reduce((m, r) => Math.max(m, r.length), 0);
-  const { columns, fieldIndex } = planColumns(rows[headerIndex] ?? [], width, range.s.c);
+  const { columns, fieldIndex } = planColumns(rows[headerIndex], width, range.s.c);
 
   const report: PreservationReport = {
     dataRows: 0,
@@ -60,16 +61,16 @@ export function verifyPreservation(bytes: Uint8Array, kind: FileKind, parse: Par
   };
 
   // Index the parse result.
-  const commentsByRow = new Map<number, { section: string; item: string; comment: ParsedComment }>();
-  const itemsBySection = new Map<string, Set<string>>();
+  const commentsByRow = new Map<number, { section: ParsedSection; item: ParsedItem; comment: ParsedComment }>();
+  const sectionsByStartRow = new Map<number, ParsedSection>();
+  const itemsByStartRow = new Map<number, { section: ParsedSection; item: ParsedItem }>();
   for (const section of parse.sections) {
-    const names = new Set<string>();
-    itemsBySection.set(section.name, names);
+    sectionsByStartRow.set(section.source_row, section);
     for (const item of section.items) {
-      names.add(item.name);
+      itemsByStartRow.set(item.source_row, { section, item });
       let previousRow = -Infinity;
       for (const comment of item.comments) {
-        commentsByRow.set(comment.source_row, { section: section.name, item: item.name, comment });
+        commentsByRow.set(comment.source_row, { section, item, comment });
         if (comment.source_row <= previousRow) {
           mismatch(comment.source_row, "order", `after row ${previousRow}`, `row ${comment.source_row}`);
         }
@@ -81,11 +82,13 @@ export function verifyPreservation(bytes: Uint8Array, kind: FileKind, parse: Par
 
   const get = (cells: string[], field: keyof typeof fieldIndex) => {
     const index = fieldIndex[field];
-    return index === undefined ? "" : (cells[index] ?? "");
+    return index === undefined ? "" : cells[index]; // defval pads every row to the sheet width
   };
 
   let lastSection: string | null = null;
   let lastItem: string | null = null;
+  let activeSection: ParsedSection | null = null;
+  let activeItem: ParsedItem | null = null;
 
   for (let i = headerIndex + 1; i < rows.length; i++) {
     const row = range.s.r + i + 1;
@@ -104,7 +107,7 @@ export function verifyPreservation(bytes: Uint8Array, kind: FileKind, parse: Par
     const sectionOnly = filled(rawSection) && cells.filter(filled).length === 1;
     const item: string | null = sectionOnly ? null : rawItem.trim() || (section === lastSection ? lastItem : null);
 
-    const extras = columns.filter((c) => c.role === "extras" && filled(cells[c.index] ?? ""));
+    const extras = columns.filter((c) => c.role === "extras" && filled(cells[c.index]));
     const title = get(cells, "title");
     const body = get(cells, "body");
     const type = get(cells, "type").trim();
@@ -114,14 +117,29 @@ export function verifyPreservation(bytes: Uint8Array, kind: FileKind, parse: Par
       report.unaccountedRows.push(row);
       continue;
     }
+    // Explicit standalone declarations are boundaries even for adjacent groups
+    // with identical names; matching text alone is not evidence of identity.
+    const sectionChanged = section !== lastSection || sectionOnly;
+    if (sectionChanged) {
+      activeSection = sectionsByStartRow.get(row) ?? null;
+      if (activeSection?.name !== section) mismatch(row, "section", section, activeSection?.name ?? "(missing)");
+      activeItem = null;
+    }
+    if (item === null) {
+      activeItem = null;
+    } else if (sectionChanged || item !== lastItem || activeItem === null ||
+      (filled(rawItem) && !hasComment)) {
+      const started = itemsByStartRow.get(row);
+      activeItem = started?.item ?? null;
+      if (activeItem?.name !== item || started?.section !== activeSection) {
+        mismatch(row, "item", item, activeItem?.name ?? "(missing)");
+      }
+    }
     lastSection = section;
     lastItem = item;
 
     if (!hasComment) {
       report.structureRowsChecked++;
-      const items = itemsBySection.get(section);
-      if (!items) mismatch(row, "section", section, "(missing)");
-      else if (item && !items.has(item)) mismatch(row, "item", item, "(missing)");
       continue;
     }
 
@@ -132,8 +150,12 @@ export function verifyPreservation(bytes: Uint8Array, kind: FileKind, parse: Par
     }
     report.commentRowsChecked++;
     const { comment } = stored;
-    if (stored.section !== section) mismatch(row, "section", section, stored.section);
-    if (stored.item !== item) mismatch(row, "item", item ?? "", stored.item);
+    if (stored.section !== activeSection || stored.section.name !== section) {
+      mismatch(row, "section", section, stored.section.name);
+    }
+    if (stored.item !== activeItem || stored.item.name !== item) {
+      mismatch(row, "item", String(item), stored.item.name); // item is set on comment rows
+    }
     if (comment.title !== title) mismatch(row, "title", title, comment.title);
     if (visibleText(comment.body_html) !== visibleText(body)) mismatch(row, "text", visibleText(body), visibleText(comment.body_html));
     if ((comment.comment_type ?? "") !== type) mismatch(row, "type", type, comment.comment_type ?? "");
@@ -150,6 +172,12 @@ export function verifyPreservation(bytes: Uint8Array, kind: FileKind, parse: Par
   parse.sections.forEach((s, index) => {
     const previous = parse.sections[index - 1];
     if (previous && s.source_row <= previous.source_row) mismatch(s.source_row, "section order", previous.name, s.name);
+    s.items.forEach((item, itemIndex) => {
+      const previousItem = s.items[itemIndex - 1];
+      if (previousItem && item.source_row <= previousItem.source_row) {
+        mismatch(item.source_row, "item order", previousItem.name, item.name);
+      }
+    });
   });
 
   return report;

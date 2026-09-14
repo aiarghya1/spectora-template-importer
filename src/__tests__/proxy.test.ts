@@ -6,7 +6,9 @@ import { proxy } from "../proxy";
 
 vi.mock("@supabase/ssr", () => ({ createServerClient: vi.fn() }));
 
-type CookieOptions = { cookies: { setAll: (cookies: Array<{ name: string; value: string; options: object }>) => void } };
+type CookieOptions = {
+  cookies: { getAll: () => unknown; setAll: (cookies: Array<{ name: string; value: string; options: object }>) => void };
+};
 
 const saved = { ...process.env };
 beforeAll(() => {
@@ -55,6 +57,20 @@ describe("proxy", () => {
     expect((await proxy(request("/auth/confirm?x=1"))).headers.get("x-middleware-next")).toBe("1");
     signedIn(true);
     expect((await proxy(request("/templates"))).headers.get("x-middleware-next")).toBe("1");
+  });
+
+  it("gives Supabase the request's cookies", async () => {
+    let seen: unknown;
+    vi.mocked(createServerClient).mockImplementation(((_url: string, _key: string, options: CookieOptions) => ({
+      auth: {
+        getClaims: async () => {
+          seen = options.cookies.getAll();
+          return { data: null, error: null };
+        },
+      },
+    })) as never);
+    await proxy(new NextRequest("http://localhost/login", { headers: { cookie: "sb-session=abc" } }));
+    expect(seen).toEqual([{ name: "sb-session", value: "abc" }]);
   });
 
   it("forwards refreshed session cookies on the response", async () => {

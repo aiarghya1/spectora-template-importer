@@ -21,17 +21,9 @@ export default defineConfig({
       include: ["src/**/*.{ts,tsx}"],
       exclude: ["**/__tests__/**", "src/test/**"],
       reporter: ["text", "text-summary", "json-summary"],
-      // Set just below measured coverage so it can only go up. Critical paths are held higher.
-      thresholds: {
-        lines: 97,
-        statements: 95,
-        functions: 94,
-        branches: 87,
-        "src/lib/import/**": { lines: 96, functions: 100 },
-        "src/lib/html/**": { lines: 96, functions: 100 },
-        "src/app/templates/actions.ts": { lines: 100, functions: 100 },
-        "src/app/api/**": { lines: 100, functions: 100 },
-      },
+      // Every line, statement, function and branch in src/ is exercised. Keep it that way:
+      // new code needs tests, and genuinely unreachable code should be removed rather than ignored.
+      thresholds: { lines: 100, statements: 100, functions: 100, branches: 100 },
     },
   },
 });

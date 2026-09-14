@@ -80,33 +80,39 @@ describe("getTemplate", () => {
     });
     expect(db.ops.find((op) => op.name === "sections")?.order).toEqual([["position", undefined]]);
   });
+
+  it("loads every section when a template has more than 1000", async () => {
+    const sections = Array.from({ length: 1001 }, (_, n) => ({ id: `section-${n}`, name: `Section ${n}`, version: 1, items: [{ count: 0 }] }));
+    const db = withDb((op) => {
+      if (op.name === "templates") return { data: { id: T, name: "Large", version: 1, updated_at: "2026-09-14", import_id: null, copied_from_id: null } };
+      const [from, to] = op.range ?? [0, 999];
+      return { data: sections.slice(from, to + 1) };
+    });
+    const result = await getTemplate(T);
+    expect(result?.sections).toHaveLength(1001);
+    expect(result?.sections[1000].name).toBe("Section 1000");
+    expect(db.ops.filter((op) => op.name === "sections").map((op) => op.range)).toEqual([[0, 999], [1000, 1999]]);
+  });
 });
 
 describe("getSectionContent", () => {
   it("scopes by template and section, orders items and comments, and renders safely", async () => {
-    const db = withDb(() => ({
-      data: [
-        {
-          id: I,
-          name: "Coverings",
-          version: 1,
-          source_row: 4,
-          comments: [
-            { id: "c1", title: "Plain", body_html: "Line one\nLine two", comment_type: null, version: 1, source_row: 4, extras: {} },
-            { id: "c2", title: "HTML", body_html: '<p>Worn</p><img src=x onerror="alert(1)">', comment_type: "defect", version: 2, source_row: 5, extras: { Category: "1" } },
-          ],
-        },
-      ],
-    }));
+    const db = withDb((op) => op.name === "items"
+      ? { data: [{ id: I, name: "Coverings", version: 1, source_row: 4 }] }
+      : { data: [
+        { id: "c2", item_id: I, title: "HTML", body_html: '<p>Worn</p><img src=x onerror="alert(1)">', comment_type: "defect", version: 2, source_row: 5, extras: { Category: "1" }, position: 1 },
+        { id: "c1", item_id: I, title: "Plain", body_html: "Line one\nLine two", comment_type: null, version: 1, source_row: 4, extras: {}, position: 0 },
+      ] });
 
     const items = await getSectionContent(T, S);
     expect(db.ops[0].filters).toEqual([
       ["eq", "template_id", T],
       ["eq", "section_id", S],
     ]);
-    expect(db.ops[0].order).toEqual([
-      ["position", undefined],
-      ["position", { referencedTable: "comments" }],
+    expect(db.ops[0].order).toEqual([["position", undefined]]);
+    expect(db.ops[1].filters).toEqual([
+      ["eq", "template_id", T],
+      ["eq", "items.section_id", S],
     ]);
     expect(items?.[0].comments.map((c) => c.renderedHtml)).toEqual(["Line one<br>Line two", "<p>Worn</p>"]);
     expect(items?.[0].comments[1]).toMatchObject({ commentType: "defect", extras: { Category: "1" }, sourceRow: 5 });
@@ -114,6 +120,24 @@ describe("getSectionContent", () => {
 
   it("rejects malformed ids", async () => {
     expect(await getSectionContent(T, "nope")).toBeNull();
+  });
+
+  it("pages all items and comments past the 1000-row response cap", async () => {
+    const items = Array.from({ length: 1002 }, (_, n) => ({ id: `item-${n}`, name: `Item ${n}`, version: 1, source_row: n + 2 }));
+    const comments = Array.from({ length: 1003 }, (_, n) => ({
+      id: `comment-${String(n).padStart(4, "0")}`, item_id: `item-${n % 1002}`, title: `Comment ${n}`,
+      body_html: "safe", comment_type: null, version: 1, source_row: n + 2, extras: {}, position: n === 1002 ? 1 : 0,
+    }));
+    const db = withDb((op) => {
+      const [from, to] = op.range ?? [0, 999];
+      return { data: (op.name === "items" ? items : comments).slice(from, to + 1) };
+    });
+    const result = await getSectionContent(T, S);
+    expect(result).toHaveLength(1002);
+    expect(result?.[0].comments.map((comment) => comment.title)).toEqual(["Comment 0", "Comment 1002"]);
+    expect(result?.[1001].comments[0].title).toBe("Comment 1001");
+    expect(db.ops.filter((op) => op.name === "items").map((op) => op.range)).toEqual([[0, 999], [1000, 1999]]);
+    expect(db.ops.filter((op) => op.name === "comments").map((op) => op.range)).toEqual([[0, 999], [1000, 1999]]);
   });
 });
 

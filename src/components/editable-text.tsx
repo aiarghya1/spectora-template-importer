@@ -94,6 +94,8 @@ export function EditableText({
           title={`Click to rename`}
           aria-label={`${label}: ${current}. Click to rename`}
           onClick={() => {
+            // An Esc that removed the input may never have been followed by a blur; don't let it swallow this edit.
+            cancelled.current = false;
             setDraft(current);
             setEditing(true);
           }}

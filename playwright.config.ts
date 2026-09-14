@@ -1,11 +1,17 @@
 import { defineConfig, devices } from "@playwright/test";
+import { loadEnvConfig } from "@next/env";
 
 /**
  * End-to-end tests against a real Supabase-backed app.
  * Local:    E2E_EMAIL=… E2E_PASSWORD=… npm run test:e2e        (starts `npm run dev` with .env.local)
  * Deployed: E2E_BASE_URL=https://… E2E_EMAIL=… E2E_PASSWORD=… npm run test:e2e
  */
-const baseURL = process.env.E2E_BASE_URL ?? "http://localhost:3000";
+loadEnvConfig(process.cwd());
+const baseURL = process.env.E2E_BASE_URL || "http://localhost:3000";
+const missingCredentials = ["E2E_EMAIL", "E2E_PASSWORD"].filter((name) => !process.env[name]);
+if (missingCredentials.length > 0) {
+  throw new Error(`E2E tests require ${missingCredentials.join(" and ")}. Configure a test account before running them.`);
+}
 
 export default defineConfig({
   testDir: "e2e",

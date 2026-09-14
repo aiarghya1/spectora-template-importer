@@ -195,6 +195,23 @@ describe("row level security", () => {
   });
 });
 
+describe("private staging storage", () => {
+  it("limits uploaded source files to the authenticated user's folder", async () => {
+    const bucket = (await db.query<{ public: boolean; file_size_limit: number }>(
+      `select public, file_size_limit from storage.buckets where id = 'template-import-staging'`,
+    )).rows[0];
+    expect(bucket).toEqual({ public: false, file_size_limit: 20971520 });
+
+    const ownPath = `${alice}/${randomUUID()}.xlsx`;
+    await as(alice, (tx) => tx.query(`insert into storage.objects (bucket_id, name) values ('template-import-staging', $1)`, [ownPath]));
+    await expect(as(bob, (tx) => tx.query(`insert into storage.objects (bucket_id, name) values ('template-import-staging', $1)`, [`${alice}/${randomUUID()}.xlsx`]))).rejects.toThrow(/row-level security/);
+    await expect(as(alice, (tx) => tx.query(`insert into storage.objects (bucket_id, name) values ('template-import-staging', $1)`, [`${alice}/${randomUUID()}.exe`]))).rejects.toThrow(/row-level security/);
+    expect((await as(bob, (tx) => tx.query(`select name from storage.objects where name = $1`, [ownPath]))).rows).toEqual([]);
+    expect((await as(alice, (tx) => tx.query(`select name from storage.objects where name = $1`, [ownPath]))).rows).toHaveLength(1);
+    expect((await as(bob, (tx) => tx.query(`delete from storage.objects where name = $1`, [ownPath]))).affectedRows).toBe(0);
+  });
+});
+
 describe("move_node", () => {
   it("swaps with the neighbour and is a no-op at the edges", async () => {
     const { template_id } = await importAs(alice);

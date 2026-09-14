@@ -55,13 +55,13 @@ const GROUPED: Record<GroupedCode, { severity: Severity; category: IssueCategory
     severity: "warning",
     category: "structure",
     message: (n) =>
-      `${n} row(s) belong to a section that already appeared earlier in the file; they were grouped under its first appearance.`,
+      `${n} row(s) restart a section name used earlier in the file. Separate sections were kept to preserve spreadsheet order; review whether they belong together.`,
   },
   item_not_contiguous: {
     severity: "warning",
     category: "structure",
     message: (n) =>
-      `${n} row(s) belong to an item that already appeared earlier in its section; they were grouped under its first appearance.`,
+      `${n} row(s) restart an item name used earlier in the section. Separate items were kept to preserve spreadsheet order; review whether they belong together.`,
   },
   names_trimmed: {
     severity: "info",
@@ -82,7 +82,7 @@ const GROUPED: Record<GroupedCode, { severity: Severity; category: IssueCategory
 };
 
 type ItemBuilder = ParsedItem;
-type SectionBuilder = ParsedSection & { itemByName: Map<string, ItemBuilder> };
+type SectionBuilder = ParsedSection & { itemNames: Set<string> };
 
 function fail(code: ParseFailure["code"], message: string, detail?: Record<string, unknown>): ParseFailure {
   return detail ? { ok: false, code, message, detail } : { ok: false, code, message };
@@ -156,7 +156,7 @@ export function parseSpectoraExport({ bytes, filename, kind }: ParseInput): Pars
 
   const range = XLSX.utils.decode_range(ref);
   const rawRows = XLSX.utils.sheet_to_json<unknown[]>(sheet, { header: 1, raw: true, defval: null, blankrows: true });
-  const text = rawRows.map((row) => (Array.isArray(row) ? row.map(cellText) : []));
+  const text = rawRows.map((row) => row.map(cellText));
   const rowNumber = (index: number) => range.s.r + index + 1;
 
   const headerIndex = findHeaderRow(text.slice(0, LIMITS.headerScanRows));
@@ -205,13 +205,12 @@ export function parseSpectoraExport({ bytes, filename, kind }: ParseInput): Pars
     else suppressedIssues++;
   };
 
-  const groupRows = new Map<GroupedCode, number[]>();
-  const groupCounts = new Map<GroupedCode, number>();
+  const groups = new Map<GroupedCode, { count: number; rows: number[] }>();
   const group = (code: GroupedCode, row: number) => {
-    groupCounts.set(code, (groupCounts.get(code) ?? 0) + 1);
-    const rows = groupRows.get(code) ?? [];
-    if (rows.length < LIMITS.detailRows) rows.push(row);
-    groupRows.set(code, rows);
+    const entry = groups.get(code) ?? { count: 0, rows: [] };
+    entry.count++;
+    if (entry.rows.length < LIMITS.detailRows) entry.rows.push(row);
+    groups.set(code, entry);
   };
 
   const rowDetail = (cells: string[]) =>
@@ -238,7 +237,7 @@ export function parseSpectoraExport({ bytes, filename, kind }: ParseInput): Pars
   }
 
   const sections: SectionBuilder[] = [];
-  const sectionByName = new Map<string, SectionBuilder>();
+  const sectionNames = new Set<string>();
   const columnValues = new Array<number>(width).fill(0);
   const lastOrder = new Map<ItemBuilder, number>();
   let lastSection: SectionBuilder | null = null;
@@ -321,13 +320,15 @@ export function parseSpectoraExport({ bytes, filename, kind }: ParseInput): Pars
       if (isFilled(value)) columnValues[index]++;
     });
 
-    let section = sectionByName.get(sectionName);
-    if (!section) {
-      section = { name: sectionName, source_row: row, extras: {}, items: [], itemByName: new Map() };
+    let section = sections.at(-1);
+    // A section-only row is an explicit declaration, even when its name matches
+    // the preceding section. Repeated names do not establish identity.
+    if (!section || section.name !== sectionName || sectionOnly) {
+      if (sectionNames.has(sectionName)) group("section_not_contiguous", row);
+      section = { name: sectionName, source_row: row, extras: {}, items: [], itemNames: new Set() };
       sections.push(section);
-      sectionByName.set(sectionName, section);
-    } else if (section !== lastSection) {
-      group("section_not_contiguous", row);
+      sectionNames.add(sectionName);
+      lastItem = null;
     }
     stats.cellsStored += isFilled(rawSection) ? 1 : 0;
 
@@ -338,13 +339,15 @@ export function parseSpectoraExport({ bytes, filename, kind }: ParseInput): Pars
       continue;
     }
 
-    let item = section.itemByName.get(itemName);
-    if (!item) {
+    const itemOnlyMarker = isFilled(rawItem) && !isFilled(title) && !isFilled(bodyRaw) && !commentType &&
+      !columns.some((column) => column.role === "extras" && isFilled(cells[column.index]));
+    let item = section.items.at(-1);
+    // Likewise, an item-only row starts a new item even if the name is reused.
+    if (!item || item.name !== itemName || lastItem !== item || itemOnlyMarker) {
+      if (section.itemNames.has(itemName)) group("item_not_contiguous", row);
       item = { name: itemName, source_row: row, extras: {}, comments: [] };
       section.items.push(item);
-      section.itemByName.set(itemName, item);
-    } else if (item !== lastItem) {
-      group("item_not_contiguous", row);
+      section.itemNames.add(itemName);
     }
     lastSection = section;
     lastItem = item;
@@ -432,7 +435,7 @@ export function parseSpectoraExport({ bytes, filename, kind }: ParseInput): Pars
     });
   }
 
-  for (const [code, count] of groupCounts) {
+  for (const [code, { count, rows }] of groups) {
     const def = GROUPED[code];
     fileIssues.push({
       source_row: null,
@@ -440,7 +443,7 @@ export function parseSpectoraExport({ bytes, filename, kind }: ParseInput): Pars
       category: def.category,
       code,
       message: def.message(count),
-      detail: { count, rows: groupRows.get(code) ?? [] },
+      detail: { count, rows },
     });
   }
 

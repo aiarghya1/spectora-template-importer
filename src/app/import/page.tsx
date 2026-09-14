@@ -10,7 +10,7 @@ export default function ImportPage() {
       <main className="mx-auto w-full max-w-5xl px-4 py-8">
         <h1 className="text-2xl font-semibold tracking-tight">Import a Spectora template</h1>
         <p className="mt-1 max-w-2xl text-sm text-zinc-600">
-          You&apos;ll see exactly what will be created — and anything that can&apos;t come across — before anything is saved.
+          Review the import and its exact totals before saving. Large files show a sample here; the full issue report is saved with the template.
         </p>
         <details className="mt-4 max-w-2xl rounded-lg border border-zinc-200 bg-white px-4 py-3 text-sm">
           <summary className="cursor-pointer font-medium">How to get the file from Spectora</summary>
@@ -20,7 +20,7 @@ export default function ImportPage() {
             <li>
               Choose <strong>Export HTML Text</strong> (not plain text — that one strips your links and formatting).
             </li>
-            <li>Download the file and upload it below (.xlsx, .xls or .csv, up to 4 MB).</li>
+            <li>Download the file and upload it below (.xlsx, .xls or .csv, up to 20 MB).</li>
           </ol>
         </details>
         <div className="mt-6">

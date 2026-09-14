@@ -16,12 +16,20 @@ const SUPABASE_STUB = `
   create table auth.users (id uuid primary key);
   create function auth.uid() returns uuid language sql stable
     as $$ select nullif(current_setting('request.jwt.claim.sub', true), '')::uuid $$;
+  create schema storage;
+  create table storage.buckets (id text primary key, name text not null, public boolean not null default false, file_size_limit bigint);
+  create table storage.objects (id uuid primary key default gen_random_uuid(), bucket_id text not null, name text not null);
+  alter table storage.objects enable row level security;
+  create function storage.foldername(path text) returns text[] language sql immutable
+    as $$ select array[split_part(path, '/', 1)] $$;
   grant usage on schema auth, public to anon, authenticated;
+  grant usage on schema storage to authenticated;
 `;
 // Supabase grants table privileges to these roles by default; RLS does the real gating.
 const SUPABASE_GRANTS = `
   grant select, insert, update, delete on all tables in schema public to anon, authenticated;
   grant usage on all sequences in schema public to anon, authenticated;
+  grant select, insert, update, delete on storage.objects to authenticated;
 `;
 
 export async function createTestDb(): Promise<PGlite> {

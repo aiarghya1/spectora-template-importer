@@ -35,4 +35,5 @@ templates ─┬─< sections ─< items ─< comments
 ## Security
 - RLS on every table: `owner_id = auth.uid()` (templates, imports) or `owns_template(template_id)` (children).
 - Functions are not executable by `anon`.
-- The service-role key is used only by `scripts/seed.ts`, never in request paths.
+- The service-role key is used by `scripts/seed.ts` and the bearer-token-protected daily cleanup route only.
+  Ordinary user requests run with the user's Supabase session and RLS.

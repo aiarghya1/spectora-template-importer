@@ -51,12 +51,12 @@ export async function latestTemplateId(): Promise<string | null> {
 export const getTemplate = cache(async (id: string): Promise<TemplateDetail | null> => {
   if (!isUuid(id)) return null;
   const supabase = await createClient();
-  const [templateRes, sectionsRes] = await Promise.all([
+  const [templateRes, sections] = await Promise.all([
     supabase.from("templates").select("id, name, version, updated_at, import_id, copied_from_id").eq("id", id).maybeSingle(),
-    supabase.from("sections").select("id, name, version, items(count)").eq("template_id", id).order("position").limit(PAGE),
+    fetchAll<{ id: string; name: string; version: number; items: unknown }>((from, to) =>
+      supabase.from("sections").select("id, name, version, items(count)").eq("template_id", id).order("position").range(from, to)),
   ]);
   if (templateRes.error) throw templateRes.error;
-  if (sectionsRes.error) throw sectionsRes.error;
   const t = templateRes.data;
   if (!t) return null;
 
@@ -73,7 +73,7 @@ export const getTemplate = cache(async (id: string): Promise<TemplateDetail | nu
     updatedAt: t.updated_at,
     importId: t.import_id,
     copiedFrom,
-    sections: (sectionsRes.data ?? []).map((s) => ({
+    sections: sections.map((s) => ({
       id: s.id,
       name: s.name,
       version: s.version,
@@ -92,30 +92,43 @@ export function renderCommentHtml(stored: string): string {
 export async function getSectionContent(templateId: string, sectionId: string): Promise<ItemView[] | null> {
   if (!isUuid(templateId) || !isUuid(sectionId)) return null;
   const supabase = await createClient();
-  const { data, error } = await supabase
-    .from("items")
-    .select("id, name, version, source_row, comments(id, title, body_html, comment_type, version, source_row, extras, position)")
-    .eq("template_id", templateId)
-    .eq("section_id", sectionId)
-    .order("position")
-    .order("position", { referencedTable: "comments" })
-    .limit(PAGE);
-  if (error) throw error;
+  const items = await fetchAll<{ id: string; name: string; version: number; source_row: number | null }>((from, to) =>
+    supabase.from("items").select("id, name, version, source_row").eq("template_id", templateId)
+      .eq("section_id", sectionId).order("position").range(from, to));
+  if (items.length === 0) return [];
 
-  return (data ?? []).map((item) => ({
+  // Fetch comments separately: an embedded relation can be capped independently
+  // by PostgREST, hiding later comments even when all parent items were fetched.
+  type CommentRow = {
+    id: string; item_id: string; title: string; body_html: string; comment_type: string | null;
+    version: number; source_row: number | null; extras: Record<string, string>; position: number;
+  };
+  const comments = await fetchAll<CommentRow>((from, to) =>
+    supabase.from("comments")
+      .select("id, item_id, title, body_html, comment_type, version, source_row, extras, position, items!inner(section_id)")
+      .eq("template_id", templateId).eq("items.section_id", sectionId)
+      .order("id").range(from, to));
+  const commentsByItem = new Map<string, CommentRow[]>();
+  for (const comment of comments) {
+    const group = commentsByItem.get(comment.item_id) ?? [];
+    group.push(comment);
+    commentsByItem.set(comment.item_id, group);
+  }
+
+  return items.map((item) => ({
     id: item.id,
     name: item.name,
     version: item.version,
     sourceRow: item.source_row,
-    comments: ((item.comments ?? []) as Array<Record<string, unknown>>).map((c) => ({
-      id: c.id as string,
-      title: c.title as string,
-      bodyHtml: c.body_html as string,
-      renderedHtml: renderCommentHtml(c.body_html as string),
-      commentType: (c.comment_type as string | null) ?? null,
-      version: c.version as number,
-      sourceRow: (c.source_row as number | null) ?? null,
-      extras: (c.extras as Record<string, string>) ?? {},
+    comments: (commentsByItem.get(item.id) ?? []).sort((a, b) => a.position - b.position).map((c) => ({
+      id: c.id,
+      title: c.title,
+      bodyHtml: c.body_html,
+      renderedHtml: renderCommentHtml(c.body_html),
+      commentType: c.comment_type ?? null,
+      version: c.version,
+      sourceRow: c.source_row ?? null,
+      extras: c.extras ?? {},
     })),
   }));
 }
