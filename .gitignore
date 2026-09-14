@@ -43,3 +43,8 @@ next-env.d.ts
 
 # test coverage
 /coverage
+
+# playwright
+/playwright-report
+/test-results
+/blob-report
