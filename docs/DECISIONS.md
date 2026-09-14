@@ -37,4 +37,6 @@ Short architecture decision log. Each entry: decision, why, what we gave up.
 
 ## D9 — Upload limits & parsing safety
 - 4 MB cap (Vercel function body limit is 4.5 MB), row cap, content sniffing (not just extension), server-side parsing only.
+- Upload goes through a Route Handler, not a Server Action: Next 16 caps Server Action bodies at 1 MB by default,
+  and a Route Handler lets us return structured error codes for the failure-case UI.
 - SheetJS 0.20.x from cdn.sheetjs.com — npm `xlsx@0.18.5` has known prototype-pollution and ReDoS CVEs.
