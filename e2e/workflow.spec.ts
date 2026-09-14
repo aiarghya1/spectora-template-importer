@@ -29,7 +29,9 @@ const created: string[] = [];
 const card = (title: string) => page.locator("article").filter({ has: page.getByRole("heading", { name: title, exact: true }) });
 
 async function editCommentHtml(title: string, html: string) {
-  const target = card(title);
+  const commentId = await card(title).getAttribute("id");
+  if (!commentId) throw new Error(`Comment ${title} has no stable id.`);
+  const target = page.locator(`article[id="${commentId}"]`);
   await target.getByRole("button", { name: "Edit" }).click();
   await target.getByRole("tab", { name: "HTML" }).click();
   await target.getByRole("textbox", { name: "Comment HTML" }).fill(html);
@@ -97,6 +99,11 @@ test("saves section renames and comment edits across a reload", async () => {
   const field = page.getByRole("textbox", { name: "Section name" });
   await field.fill("Roof (checked)");
   await field.press("Enter");
+  await expect(page.getByRole("navigation", { name: "Sections" }).getByRole("link", { name: "Roof (checked)" })).toBeVisible();
+
+  // A section rename revalidates this server-rendered page. Finish that
+  // navigation and prove the rename persisted before opening another editor.
+  await page.reload();
   await expect(page.getByRole("navigation", { name: "Sections" }).getByRole("link", { name: "Roof (checked)" })).toBeVisible();
 
   await editCommentHtml("Asphalt", "<p>Edited by e2e</p>");

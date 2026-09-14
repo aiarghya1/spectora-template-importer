@@ -51,6 +51,13 @@ describe("proxy", () => {
     expect(await response.json()).toMatchObject({ code: "unauthenticated" });
   });
 
+  it("lets only the exact cron path reach its bearer-token handler without a user cookie", async () => {
+    signedIn(false);
+    expect((await proxy(request("/api/cron/cleanup-imports"))).headers.get("x-middleware-next")).toBe("1");
+    expect(createServerClient).not.toHaveBeenCalled();
+    expect((await proxy(request("/api/cron/cleanup-imports/extra"))).status).toBe(401);
+  });
+
   it("lets public pages and signed-in users through", async () => {
     signedIn(false);
     expect((await proxy(request("/login"))).headers.get("x-middleware-next")).toBe("1");

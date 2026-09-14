@@ -9,6 +9,12 @@ const PUBLIC_PATHS = ["/login", "/auth"];
  * This is an optimistic check only; data access is authorised by RLS in the database.
  */
 export async function proxy(request: NextRequest) {
+  // Vercel cron requests carry CRON_SECRET, not a Supabase user cookie.
+  // The exact route authenticates that bearer token itself.
+  if (request.nextUrl.pathname === "/api/cron/cleanup-imports") {
+    return NextResponse.next({ request });
+  }
+
   let response = NextResponse.next({ request });
   const { url, anonKey } = supabaseEnv();
 

@@ -3,18 +3,19 @@
 Import a Spectora **Export HTML Text** spreadsheet, check that nothing was lost, then edit and duplicate the
 template. Built with Next.js 16 and Supabase for Vercel.
 
-- **Live app:** _add the Vercel URL here_
+- **Live app:** https://spectora-template-importer.vercel.app
 - **Decisions, limits, verification, time spent:** [NOTES.md](NOTES.md)
 - **Architecture decisions:** [docs/DECISIONS.md](docs/DECISIONS.md) · **Schema:** [docs/schema.md](docs/schema.md) ·
   **Export format:** [docs/spectora-export-format.md](docs/spectora-export-format.md) ·
   **Test cases:** [docs/TEST_CASES.md](docs/TEST_CASES.md)
 
 ## Reviewer access
-Sign in on the live app with the demo account (it opens on the seeded, already-imported template):
+Sign in on the live app with the demo account. The account is ready; its imported template will be seeded
+when the real Spectora export is available in `fixtures/`:
 
 | Email | Password |
 |---|---|
-| _set as `DEMO_EMAIL`_ | _set as `DEMO_PASSWORD`_ |
+| Set privately as `DEMO_EMAIL` | Set privately as `DEMO_PASSWORD` |
 
 You can also create your own account from the sign-in page; it starts empty, and you can import the file from
 `fixtures/`.

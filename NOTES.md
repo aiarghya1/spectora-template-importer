@@ -1,11 +1,11 @@
 # NOTES
 
-> Items marked **[TODO before submitting]** need the real Spectora export, the deployed URL, or first-hand
+> Items marked **[TODO before submitting]** need the real Spectora export or first-hand
 > product exploration. Everything else describes what is built and tested.
 
 ## At a glance
-- **Live app:** [TODO before submitting] Vercel URL
-- **Login:** demo account — see README → *Reviewer access*
+- **Live app:** https://spectora-template-importer.vercel.app
+- **Login:** confirmed demo account — see README → *Reviewer access*. The real-export seed is pending the fixture.
 - **Input file:** [TODO before submitting] `fixtures/<file>.xlsx` — Spectora *InterNACHI Residential* (or the
   template actually used), exported via *Export to spreadsheet → Export HTML Text* on <date> from a trial account.
   Sample content only, no customer data.
@@ -80,7 +80,7 @@ is *"what did I lose?"* A silent importer, even a good one, can't answer that.
 - **Deleted or foreign template:** a not-found page. **Database outage:** an error page with retry.
 
 ## How I checked my work
-- **Automated tests: 352 across 46 files**, all passing (`npm run test:coverage`, run in CI, failing below 100% coverage). Catalogue with IDs, inputs and expected results: `docs/TEST_CASES.md`.
+- **Automated tests: 353 across 46 files**, including the cron proxy regression check (`npm run test:coverage` fails below 100% coverage in CI). Catalogue with IDs, inputs and expected results: `docs/TEST_CASES.md`.
 
   | Layer | What it covers |
   |---|---|
@@ -88,14 +88,14 @@ is *"what did I lose?"* A silent importer, even a good one, can't answer that.
   | Server | every server action (validation, edit conflict vs not found, database error mapping, position retry), upload route (401/413/400/409/422/429/500), login and sign-up (no open redirects, no account enumeration), email confirmation, auth proxy, paginated queries, Supabase cookie handling. Uses a small fake Supabase client that records each query. |
   | Component (jsdom) | import wizard (failures, preview, commit with fingerprint, stale response ignored), comment editor (HTML mode protects formatting, save/conflict/⌘S/unsaved guard), rename, add/move/delete dialogs, issue list, reconciliation, tree preview, visual-editor toolbar, all pages |
   | Database (PGlite, real migrations) | atomic import, order, parser output = stored rows, copy independence, RLS isolation, cross-template FK, reordering, stale versions, quota, rate limit, private Storage owner policies |
-  | End-to-end (Playwright) | 5 browser scenarios: bad files → preview → import → edit → reload → duplicate → edit copy → original unchanged → report. **Written but not yet run:** the local dev server timed out before a scenario could start. |
+  | End-to-end (Playwright) | 5 browser scenarios: bad files → preview → import → edit → reload → duplicate → edit copy → original unchanged → report. All 5 passed against the public Vercel URL with a generated test export. |
 
-  A confirmed test account now exists in the `test` project. A local Playwright run was attempted, but the
-  sandboxed Next dev server never opened its port; Playwright timed out before any scenario ran.
+  A confirmed test account exists in the `test` project. The live run passed on 2026-09-15. The real export
+  still needs to be committed and checked separately; generated test data cannot establish its fidelity.
 
 - **Coverage (V8, all of `src/`):** 100% lines, statements, branches and functions, enforced in CI.
   - Unit and integration tests target different code; separate-layer coverage needs remeasurement after the grouping change.
-  - **End-to-end:** not measured yet.
+  - **End-to-end:** 5/5 scenarios passed; browser code coverage is not collected.
   - **No ignore comments:** unreachable fallbacks were deleted instead.
 - **Bugs the tests caught and I fixed:**
   - `safeFilename` stripped spaces and punctuation from filenames.

@@ -1,22 +1,22 @@
 # Test cases
 
-**Status (2026-09-14):**
-- **Unit and integration:** 352 automated tests across 46 files, all passing, with **100% line, statement, branch and function coverage** of `src/` (enforced in CI).
-- **End-to-end:** 5 Playwright tests written, **not yet run** (they need the Supabase project and a test account).
-- **Manual checks:** the checks against the real Spectora export and the deployment are **pending** (§4).
+**Status (2026-09-15):**
+- **Unit and integration:** 353 automated tests across 46 files, with **100% line, statement, branch and function coverage** of `src/` required in CI.
+- **End-to-end:** 5 Playwright tests passed against the public Vercel app and a real Supabase test account.
+- **Manual checks:** the real Spectora export and seeded-template checks are **pending** (§4).
 
 | Layer | What "unit / integration / e2e" means here | Tests | Status |
 |---|---|---|---|
 | Unit | Pure logic (parser, sanitiser, verifier, file checks) and UI components in isolation (jsdom, actions mocked) | 195 | ✅ passing |
-| Integration | Server code wired together (actions, routes, auth, proxy, queries) against a recording fake Supabase client; pages composed with real components; **both SQL migrations** in PGlite | 157 | ✅ passing |
-| End-to-end | A real browser against the running app and a real Supabase database | 5 | ⏳ written, not run |
+| Integration | Server code wired together (actions, routes, auth, proxy, queries) against a recording fake Supabase client; pages composed with real components; **both SQL migrations** in PGlite | 158 | ✅ passing before the new cron regression; CI rerun pending |
+| End-to-end | A real browser against the deployed app and a real Supabase database | 5 | ✅ passing |
 | Manual / pending | Real Spectora export, seeded deployment | 6 | ⏳ not run |
 
 Each row names the test file so it can be found. `(×n)` means one parameterised test that runs *n* cases.
 
 ## How to run
 ```bash
-npm test                                         # unit + integration (352)
+npm test                                         # unit + integration (353)
 npm run test:coverage                            # same, failing below 100% coverage (as CI)
 npm run test:all                                 # coverage + browser workflow; reads .env.local
 npx vitest run src/lib/import                    # one area
@@ -307,7 +307,7 @@ Every successful case also asserts **conservation**: filled cells = stored + rea
 
 ---
 
-## 2. Integration tests (157)
+## 2. Integration tests (158)
 
 ### 2.1 Template server actions — `src/app/templates/__tests__/actions.test.ts` (27)
 | ID | Test case | Input / setup | Expected result |
@@ -368,7 +368,7 @@ Every successful case also asserts **conservation**: filled cells = stored + rea
 | IT-CNF-02 | Invalid or expired link | Verification error | 307 → `/login?error=confirm` |
 | IT-CNF-03 | Missing parameters | `?type=email` | Supabase not called; → `/login?error=confirm` |
 
-### 2.5 Auth proxy and configuration — `src/__tests__/proxy.test.ts` (6)
+### 2.5 Auth proxy and configuration — `src/__tests__/proxy.test.ts` (7)
 | ID | Test case | Request | Expected result |
 |---|---|---|---|
 | IT-PRX-01 | Signed-out page request | `/templates/123` | 307 → `/login?next=%2Ftemplates%2F123` |
@@ -377,6 +377,7 @@ Every successful case also asserts **conservation**: filled cells = stored + rea
 | IT-PRX-04 | Session refresh | Supabase refreshes the cookie | Refreshed cookie set on the response |
 | IT-PRX-05 | Missing configuration | No Supabase URL | Error telling you to copy `.env.example` |
 | IT-PRX-06 | Request cookies passed to Supabase | Request with `sb-session=abc` | Supabase sees `[{ name: "sb-session", value: "abc" }]` |
+| IT-PRX-07 | Cron bypass is exact | Unsigned `/api/cron/cleanup-imports`, then `/api/cron/cleanup-imports/extra` | Exact route reaches its bearer-token handler; suffix remains protected with 401 |
 
 ### 2.6 Database queries — `src/lib/templates/__tests__/queries.test.ts` (14)
 | ID | Test case | Setup | Expected result |
@@ -504,16 +505,16 @@ Measured with V8 over every file in `src/`.
 | Run | Tests | Lines | Statements | Branches | Functions |
 |---|---|---|---|---|---|
 | Unit only | 195 (28 files) | not remeasured separately | | | |
-| Integration only | 157 (18 files) | not remeasured separately | | | |
-| **Combined — enforced in CI** | **352 (46 files)** | **100%** (1,315/1,315) | **100%** (1,536/1,536) | **100%** (1,168/1,168) | **100%** (333/333) |
-| End-to-end | 5 | not measured (not yet run; browser coverage isn't collected) | | | |
+| Integration only | 158 (18 files) | not remeasured separately | | | |
+| **Combined — enforced in CI** | **353 (46 files)** | **100% required**; CI rerun pending | **100% required** | **100% required** | **100% required** |
+| End-to-end | 5/5 passed on the public app | not measured (browser coverage isn't collected) | | | |
 
 - **Why separate-layer percentages are omitted:** the layers target different code, and this change was verified with the combined coverage gate. The separate runs need remeasurement before reporting a percentage.
 - **No ignore comments:** no `/* v8 ignore */` or similar is used anywhere. Where a branch could never run, the code was removed. Examples: fallbacks for values the spreadsheet library always provides, and a dead input reset in the wizard.
 
 ---
 
-## 3. End-to-end tests — `e2e/workflow.spec.ts` (5, Playwright) ⏳ written, not yet run
+## 3. End-to-end tests — `e2e/workflow.spec.ts` (5, Playwright) ✅ passed on the live app
 **Preconditions:**
 - The app is running (locally or deployed) against a Supabase project with the migration applied.
 - A confirmed test account, provided as `E2E_EMAIL` / `E2E_PASSWORD`.
@@ -534,14 +535,14 @@ Measured with V8 over every file in `src/`.
 
 ---
 
-## 4. Pending checks (need the real export or the deployment)
+## 4. Pending checks (real export required)
 | ID | Check | Steps | Pass criteria | Status |
 |---|---|---|---|---|
 | MAN-01 | Real export preserved | `npm run verify:export -- fixtures/<InterNACHI export>` | Exit 0: conservation balanced, 0 mismatches, 0 unaccounted rows | ⏳ waiting for export |
 | MAN-02 | Real export column mapping | Compare the printed column table with `docs/spectora-export-format.md` | Every Spectora column recognised; unknown ones understood and documented | ⏳ waiting for export |
 | MAN-03 | Spot-check against Spectora | Import in the app; compare 3 sections (names, order, comment text, links, bold/colour) with Spectora | Identical, apart from changes listed in the report | ⏳ |
-| MAN-04 | Seeded deployment | `npm run seed`; open the live URL; sign in as the demo user | Opens straight on the imported template | ⏳ waiting for Supabase + deploy |
-| MAN-05 | E2E on the deployment | `E2E_BASE_URL=… npm run test:e2e` | E2E-01 to 05 pass | ⏳ |
+| MAN-04 | Seeded deployment | `npm run seed`; open the live URL; sign in as the demo user | Opens straight on the imported template | ⏳ waiting for real export; deployment and account are ready |
+| MAN-05 | E2E on the deployment | `E2E_BASE_URL=… npm run test:e2e` | E2E-01 to 05 pass | ✅ 5/5 passed on 2026-09-15 |
 | MAN-06 | A second export in the same format | Import another Spectora HTML-text export, if one is available | Imports; report explains any differences | ⏳ optional |
 
 ---
