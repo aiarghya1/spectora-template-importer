@@ -1,14 +1,14 @@
 # NOTES
 
-> Items marked **[TODO before submitting]** need the real Spectora export or first-hand
+> Items marked **[TODO before submitting]** need first-hand
 > product exploration. Everything else describes what is built and tested.
 
 ## At a glance
 - **Live app:** https://spectora-template-importer.vercel.app
 - **Login:** confirmed demo account — see README → *Reviewer access*. The real-export seed is pending the fixture.
-- **Input file:** [TODO before submitting] `fixtures/<file>.xlsx` — Spectora *InterNACHI Residential* (or the
-  template actually used), exported via *Export to spreadsheet → Export HTML Text* on <date> from a trial account.
-  Sample content only, no customer data.
+- **Input file:** `fixtures/InterNACHI Residential.xlsx` — Spectora Template Center *InterNACHI Residential*,
+  template ID `334635`, exported via *Export to spreadsheet → Export HTML Text* on 2026-09-14 from a trial
+  account. Shareable sample content only; fingerprint and source details are in `fixtures/README.md`.
 
 ## What I built
 | Baseline | How |
@@ -65,7 +65,8 @@ is *"what did I lose?"* A silent importer, even a good one, can't answer that.
   - usage count, default photos, last modified
   - any unknown column (flagged as a warning)
 - **Also unsupported:** inline media and non-allowlisted HTML/CSS (removed and reported, per the rules above).
-- **Unverified:** column handling follows Spectora's published spreadsheet spec. **[TODO before submitting]** Confirm or correct this against the committed export (`npm run verify:export`).
+- **Verified against the committed export:** its annotated Comment Type header is mapped to the editable
+  field; other annotated Spectora headers are recognised and retained as read-only extras. No unknown columns.
 
 ## Failure cases handled
 - Wrong file type, a renamed or corrupt file, an empty file, over 20 MB, password-protected, or a zip bomb.
@@ -117,7 +118,12 @@ is *"what did I lose?"* A silent importer, even a good one, can't answer that.
     - reordering works
     - stale versions are rejected
     - quotas and rate limits are enforced
-- **`npm run verify:export -- fixtures/<file>`:** runs the independent row-by-row check (D12) against the real export. **[TODO before submitting]** Paste the result summary here.
+- **`npm run verify:export -- 'fixtures/InterNACHI Residential.xlsx'`:** 13 sections, 69 items, 392 comments;
+  all 392 data rows checked, 0 skipped, 0 mismatches, 0 unaccounted rows. All 4,611 filled cells are accounted
+  for (1,877 editable/stored, 2,734 read-only, 0 reported). There are 0 warnings/errors; 39 rows have
+  reported cosmetic HTML changes (mostly removed link attributes), and 83 comments have empty text in the
+  source but retain their names and other fields. The sample has no repeated section or item runs; generated
+  regression cases verify that non-contiguous and explicitly declared repeated names remain separate.
 - **Manual pass on the live app** **[TODO before submitting]**:
   1. Import the fixture.
   2. Rename a section, item and comment; reload and confirm the changes stuck.

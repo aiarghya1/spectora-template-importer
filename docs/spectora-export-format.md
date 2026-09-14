@@ -1,7 +1,8 @@
 # Spectora template export format
 
-> **Status:** derived from Spectora's published import spec. **Verify against `fixtures/` once the real
-> export is committed** and update this file with anything that differs.
+> **Status:** checked against the committed `fixtures/InterNACHI Residential.xlsx` export (SHA-256 in
+> `fixtures/README.md`). It has 42 columns, 392 data rows, and no unknown columns after mapping the
+> explanatory header labels described below.
 
 Sources:
 - [How to Export a Template](https://support.spectora.com/en/articles/2769896-how-to-export-a-template) —
@@ -11,7 +12,8 @@ Sources:
 
 ## Shape
 One row per comment (Spectora calls comments "narratives"). Section and item are repeated on every row.
-There is no template name, and no section- or item-level settings — only comment rows.
+The committed sample has 392 comment rows in 13 section runs and 69 item runs. There is no template name,
+and no section- or item-level settings — only comment rows.
 
 ## Columns and how we handle them
 
@@ -21,17 +23,20 @@ There is no template name, and no section- or item-level settings — only comme
 | Item Name | `items.name` (required) |
 | Comment Name | `comments.title` |
 | Comment Text | `comments.body_html` (sanitised, every change reported) |
-| Comment Type (info / limit / defect) | `comments.comment_type`, verbatim |
+| Comment Type (info / limit / defect) | `comments.comment_type`, verbatim; the sample's header is `Comment Type (info, limit, defect)` |
 | Category (-1 low, 0 med, 1 high) | extras (read-only) |
 | Multiple Choice Options, Unit Type Options, Answer Type, Default Value, Default Value 2, Default Unit Type | extras — information-field settings |
 | Recommendation, Default Location, Default Estimate Min/Max | extras |
 | Order (w/i item) | extras; **row order wins**, disagreement is reported |
 | Locked, Simple Format, Disable Photos, Uses | extras |
-| Default Photo 1–3 (+ Caption) | extras — URLs kept as text, images not fetched |
+| Default Photo 1–10 (+ Caption) | extras — URLs kept as text, images not fetched |
 | Last Modified | extras |
 | anything else | extras + `unknown_column_preserved` warning |
 
 Header matching ignores case, spaces and punctuation (`normalizeHeader` in `src/lib/import/columns.ts`).
+The real export adds explanatory parentheticals to Comment Type, Category, Multiple Choice Options, Unit Type
+Options, Recommendation, Answer Type, Default Value 2, and Default Unit Type. Only these confirmed variants
+are mapped to their base labels; custom parenthetical columns remain extras.
 The header row may be preceded by up to 19 rows (e.g. a title), which are reported, not imported.
 
 ## Missing from the export vs unsupported by us

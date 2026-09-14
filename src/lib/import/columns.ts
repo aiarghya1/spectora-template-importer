@@ -9,6 +9,24 @@ export type Field = "section" | "item" | "title" | "body" | "type";
 
 export const normalizeHeader = (header: string) => header.toLowerCase().replace(/[^a-z0-9]/g, "");
 
+// Spectora's HTML-text export adds explanatory parentheticals to these headings.
+// Map only known labels: stripping every parenthetical would also reinterpret custom columns.
+const ANNOTATED_HEADERS = new Map([
+  ["commenttypeinfolimitdefect", "commenttype"],
+  ["category1low0med1high", "category"],
+  ["multiplechoiceoptionscommaseparated", "multiplechoiceoptions"],
+  ["unittypeoptionsnumericanswersonlycommaseparated", "unittypeoptions"],
+  ["recommendationfromlist", "recommendation"],
+  ["answertypebooleancheckboxdatenumberrangetext", "answertype"],
+  ["defaultvalue2forrangetypes", "defaultvalue2"],
+  ["defaultunittypefornumberandrangetypes", "defaultunittype"],
+]);
+
+const semanticHeader = (header: string) => {
+  const normalized = normalizeHeader(header);
+  return ANNOTATED_HEADERS.get(normalized) ?? normalized;
+};
+
 const FIELD_ALIASES: Record<Field, readonly string[]> = {
   section: ["sectionname", "section"],
   item: ["itemname", "item"],
@@ -54,7 +72,7 @@ export function columnLetter(index: number): string {
 export function mapHeaderRow(cells: string[]): Partial<Record<Field, number>> {
   const mapping: Partial<Record<Field, number>> = {};
   cells.forEach((cell, index) => {
-    const field = aliasToField.get(normalizeHeader(cell));
+    const field = aliasToField.get(semanticHeader(cell));
     if (field && mapping[field] === undefined) mapping[field] = index;
   });
   return mapping;
@@ -78,7 +96,7 @@ export function planColumns(headerCells: string[], width: number, startColumn: n
   for (let index = 0; index < width; index++) {
     const header = (headerCells[index] ?? "").trim();
     const letter = columnLetter(startColumn + index);
-    const normalized = normalizeHeader(header);
+    const normalized = semanticHeader(header);
     const field = aliasToField.get(normalized);
 
     if (field && fieldIndex[field] === undefined) {

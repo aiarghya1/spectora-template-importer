@@ -4,25 +4,27 @@ Import a Spectora **Export HTML Text** spreadsheet, check that nothing was lost,
 template. Built with Next.js 16 and Supabase for Vercel.
 
 - **Live app:** https://spectora-template-importer.vercel.app
-- **Decisions, limits, verification, time spent:** [NOTES.md](NOTES.md)
+- **Real-export audit:** [docs/REAL_EXPORT_AUDIT.md](docs/REAL_EXPORT_AUDIT.md) ·
+  **Decisions, limits, verification, time spent:** [NOTES.md](NOTES.md)
 - **Architecture decisions:** [docs/DECISIONS.md](docs/DECISIONS.md) · **Schema:** [docs/schema.md](docs/schema.md) ·
   **Export format:** [docs/spectora-export-format.md](docs/spectora-export-format.md) ·
   **Test cases:** [docs/TEST_CASES.md](docs/TEST_CASES.md)
 
 ## Reviewer access
-Sign in on the live app with the demo account. The account is ready; its imported template will be seeded
-when the real Spectora export is available in `fixtures/`:
+Sign in on the live app with the demo account. It opens on the imported InterNACHI Residential template.
+Share the password privately with reviewers; it is stored locally as `DEMO_PASSWORD` in `.env.local`:
 
 | Email | Password |
 |---|---|
-| Set privately as `DEMO_EMAIL` | Set privately as `DEMO_PASSWORD` |
+| `reviewer+hive-test@example.com` | Share `DEMO_PASSWORD` privately |
 
 You can also create your own account from the sign-in page; it starts empty, and you can import the file from
 `fixtures/`.
 
 ## Input file
-Place the real Spectora **Export HTML Text** spreadsheet in `fixtures/`. See `fixtures/README.md` for the
-identified source. The export is still needed before the preservation check and seed can run.
+The real Spectora **Export HTML Text** spreadsheet is committed as
+[`fixtures/InterNACHI Residential.xlsx`](fixtures/InterNACHI%20Residential.xlsx). Its source and fingerprint are
+recorded in [fixtures/README.md](fixtures/README.md).
 
 ## Local setup
 Requirements: Node 20.9+ (developed on Node 24) and a Supabase project (the free tier is fine).
@@ -88,6 +90,7 @@ npm run test:all                   # coverage, then the browser workflow
 npm run typecheck
 npm run lint
 npm run verify:export -- fixtures/<file>   # row-by-row preservation check against a real export
+npm run verify:seeded -- fixtures/<file>   # compare every saved section, item and comment with that export
 ```
 Database tests run both migrations in [PGlite](https://pglite.dev) (in-process Postgres), so they need neither
 Docker nor a Supabase project.

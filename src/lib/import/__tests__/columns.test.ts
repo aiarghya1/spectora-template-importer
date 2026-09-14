@@ -33,4 +33,25 @@ describe("columns", () => {
       ["Uses (column F)", true, "Usage count."],
     ]);
   });
+
+  it("recognises explanatory headers from the real HTML-text export without swallowing custom columns", () => {
+    const headers = [
+      "Section Name", "Item Name", "Comment Type (info, limit, defect)",
+      "Category (-1: Low, 0: Med, 1: High)",
+      "Multiple Choice Options (comma-separated)",
+      "Unit Type Options (numeric answers only, comma-separated)",
+      "Recommendation (from list)",
+      "Answer Type (boolean, checkbox, date, number, range, text)",
+      'Default Value 2 (for "range" types)',
+      'Default Unit Type (for "number" and "range" types)',
+      "Comment Type (custom)",
+    ];
+    const { columns, fieldIndex } = planColumns(headers, headers.length, 0);
+    expect(fieldIndex.type).toBe(2);
+    expect(columns.slice(2, 10).map((column) => [column.role, column.known])).toEqual([
+      ["type", true], ...Array.from({ length: 7 }, () => ["extras", true]),
+    ]);
+    expect(columns[10]).toMatchObject({ role: "extras", known: false });
+    expect(mapHeaderRow(headers)).toMatchObject({ section: 0, item: 1, type: 2 });
+  });
 });
