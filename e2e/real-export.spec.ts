@@ -42,6 +42,7 @@ test("imports the real export, persists edits, and keeps an edited copy independ
     const sectionName = page.getByRole("textbox", { name: "Section name" });
     await sectionName.fill("Inspection Details (checked)");
     await sectionName.press("Enter");
+    await expect(page.getByRole("navigation", { name: "Sections" }).getByRole("link", { name: "Inspection Details (checked)" })).toBeVisible();
     await page.reload();
     await expect(page.getByRole("navigation", { name: "Sections" }).getByRole("link", { name: "Inspection Details (checked)" })).toBeVisible();
 

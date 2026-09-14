@@ -5,7 +5,7 @@
 
 ## At a glance
 - **Live app:** https://spectora-template-importer.vercel.app
-- **Login:** confirmed demo account — see README → *Reviewer access*. The real-export seed is pending the fixture.
+- **Login:** confirmed demo account — see README → *Reviewer access*. It opens on the seeded **InterNACHI Residential** template (13 sections, 392 comments), imported from the committed fixture. Checked in a browser on the live URL on 2026-09-15.
 - **Input file:** `fixtures/InterNACHI Residential.xlsx` — Spectora Template Center *InterNACHI Residential*,
   template ID `334635`, exported via *Export to spreadsheet → Export HTML Text* on 2026-09-14 from a trial
   account. Shareable sample content only; fingerprint and source details are in `fixtures/README.md`.
@@ -91,8 +91,17 @@ is *"what did I lose?"* A silent importer, even a good one, can't answer that.
   | Database (PGlite, real migrations) | atomic import, order, parser output = stored rows, copy independence, RLS isolation, cross-template FK, reordering, stale versions, quota, rate limit, private Storage owner policies |
   | End-to-end (Playwright) | 5 browser scenarios: bad files → preview → import → edit → reload → duplicate → edit copy → original unchanged → report. All 5 passed against the public Vercel URL with a generated test export. |
 
-  A confirmed test account exists in the `test` project. The live run passed on 2026-09-15. The real export
-  still needs to be committed and checked separately; generated test data cannot establish its fidelity.
+  The generated-data run passed on the live URL on 2026-09-15.
+
+  **Real export, live (2026-09-15):** `e2e/real-export.spec.ts` passed against the public URL in 50 s. It uploads `fixtures/InterNACHI Residential.xlsx` and checks, in order:
+  - the preview shows every cell accounted for
+  - the import creates 13 sections
+  - a section rename survives a reload
+  - a comment edit survives a reload
+  - a duplicate is created and its comment edited, leaving the original unchanged
+  - the import report opens
+
+  It runs as a dedicated end-to-end account, separate from the reviewer demo account, and deletes both templates it creates. Afterwards the demo account was unchanged (one template, same version and timestamp) and the test account held no templates.
 
 - **Coverage (V8, all of `src/`):** 100% lines, statements, branches and functions, enforced in CI.
   - Unit and integration tests target different code; separate-layer coverage needs remeasurement after the grouping change.

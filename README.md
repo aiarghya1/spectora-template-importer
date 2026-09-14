@@ -42,6 +42,7 @@ cp .env.example .env.local        # then fill in the values (see below)
 | `SUPABASE_SERVICE_ROLE_KEY` | Supabase → Project Settings → API (service role / secret key) | server-only seed and cleanup cron |
 | `CRON_SECRET` | random string of at least 16 characters | authenticates the daily cleanup cron |
 | `DEMO_EMAIL`, `DEMO_PASSWORD` | choose them yourself | seed script |
+| `E2E_EMAIL`, `E2E_PASSWORD` | a **separate** confirmed account (never the demo account) | Playwright tests, which create and delete templates |
 
 `.env*` files are git-ignored (except `.env.example`). On Vercel, set the two `NEXT_PUBLIC_*` variables,
 `SUPABASE_SERVICE_ROLE_KEY`, and `CRON_SECRET`. Keep the latter two server-only.

@@ -544,9 +544,10 @@ Measured with V8 over every file in `src/`.
 | MAN-01 | Real export preserved | `npm run verify:export -- fixtures/<InterNACHI export>` | Exit 0: conservation balanced, 0 mismatches, 0 unaccounted rows | ⏳ waiting for export |
 | MAN-02 | Real export column mapping | Compare the printed column table with `docs/spectora-export-format.md` | Every Spectora column recognised; unknown ones understood and documented | ⏳ waiting for export |
 | MAN-03 | Spot-check against Spectora | Import in the app; compare 3 sections (names, order, comment text, links, bold/colour) with Spectora | Identical, apart from changes listed in the report | ⏳ |
-| MAN-04 | Seeded deployment | `npm run seed`; open the live URL; sign in as the demo user | Opens straight on the imported template | ⏳ waiting for real export; deployment and account are ready |
+| MAN-04 | Seeded deployment | `npm run seed`; open the live URL; sign in as the demo user | Opens straight on the imported template | ✅ 2026-09-15: live sign-in opens InterNACHI Residential (13 sections); report shows all 4,611 cells accounted for |
 | MAN-05 | E2E on the deployment | `E2E_BASE_URL=… npm run test:e2e` | E2E-01 to 05 pass | ✅ 5/5 passed on 2026-09-15 |
 | MAN-06 | A second export in the same format | Import another Spectora HTML-text export, if one is available | Imports; report explains any differences | ⏳ optional |
+| MAN-07 | Real export through the live workflow | `E2E_BASE_URL=https://spectora-template-importer.vercel.app npm run test:e2e -- e2e/real-export.spec.ts` (separate test account) | Preview accounted for → 13 sections → rename and comment edit survive reload → edited copy leaves original unchanged → report opens; created templates deleted | ✅ 2026-09-15, 50 s; demo account unchanged, test account empty afterwards |
 
 ---
 
