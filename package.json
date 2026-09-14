@@ -12,7 +12,7 @@
     "seed": "tsx --env-file=.env.local scripts/seed.ts",
     "verify:export": "tsx scripts/verify-export.ts",
     "db:push": "supabase db push",
-    "typecheck": "tsc --noEmit",
+    "typecheck": "next typegen && tsc --noEmit",
     "test:coverage": "vitest run --coverage",
     "test:e2e": "playwright test"
   },

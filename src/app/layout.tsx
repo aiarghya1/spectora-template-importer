@@ -1,3 +1,4 @@
+import type { ReactNode } from "react";
 import type { Metadata } from "next";
 import { Geist, Geist_Mono } from "next/font/google";
 import "./globals.css";
@@ -17,7 +18,8 @@ export const metadata: Metadata = {
   description: "Bring Spectora inspection templates across intact, then edit and copy them.",
 };
 
-export default function RootLayout({ children }: LayoutProps<"/">) {
+// Explicit props (not the generated global `LayoutProps`) so type-checking works on a fresh checkout.
+export default function RootLayout({ children }: { children: ReactNode }) {
   return (
     <html lang="en" className={`${geistSans.variable} ${geistMono.variable} h-full antialiased`}>
       <body className="flex min-h-full flex-col bg-zinc-50 text-zinc-900">{children}</body>
