@@ -6,7 +6,8 @@ template. Built with Next.js 16 and Supabase, deployed on Vercel.
 - **Live app:** _add the Vercel URL here_
 - **Decisions, limits, verification, time spent:** [NOTES.md](NOTES.md)
 - **Architecture decisions:** [docs/DECISIONS.md](docs/DECISIONS.md) · **Schema:** [docs/schema.md](docs/schema.md) ·
-  **Export format:** [docs/spectora-export-format.md](docs/spectora-export-format.md)
+  **Export format:** [docs/spectora-export-format.md](docs/spectora-export-format.md) ·
+  **Test cases:** [docs/TEST_CASES.md](docs/TEST_CASES.md)
 
 ## Reviewer access
 Sign in on the live app with the demo account (it opens on the seeded, already-imported template):
