@@ -16,6 +16,7 @@ export function LoginForm({ next }: { next?: string }) {
         <input
           name="email"
           type="email"
+          defaultValue={state.email}
           required
           autoComplete="email"
           className="rounded-md border border-zinc-300 px-3 py-2 font-normal"

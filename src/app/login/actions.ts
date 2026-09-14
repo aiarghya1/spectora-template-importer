@@ -5,7 +5,7 @@ import { headers } from "next/headers";
 import { z } from "zod";
 import { createClient } from "@/lib/supabase/server";
 
-export type AuthState = { error?: string; message?: string };
+export type AuthState = { error?: string; message?: string; email?: string };
 
 const credentials = z.object({
   email: z.email("Enter a valid email address.").max(254),
@@ -19,8 +19,11 @@ function safeNext(next: string | undefined) {
 }
 
 /** Single entry point for the form; the mode travels as a hidden field. */
-export async function authenticate(state: AuthState, formData: FormData): Promise<AuthState> {
-  return formData.get("mode") === "signup" ? signUp(formData) : signIn(formData);
+export async function authenticate(_state: AuthState, formData: FormData): Promise<AuthState> {
+  const email = String(formData.get("email") ?? "").slice(0, 254);
+  const result = formData.get("mode") === "signup" ? await signUp(formData) : await signIn(formData);
+  // React resets the form after an action completes; hand the email back so it isn't retyped.
+  return { ...result, email };
 }
 
 async function signIn(formData: FormData): Promise<AuthState> {

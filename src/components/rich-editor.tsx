@@ -24,7 +24,9 @@ export function RichEditor({ initialHtml, onChange }: { initialHtml: string; onC
     editorProps: {
       attributes: { class: "rich min-h-32 px-3 py-2 text-sm focus:outline-none", "aria-label": "Comment text", role: "textbox" },
     },
-    onUpdate: ({ editor: e }) => onChangeRef.current(e.isEmpty ? "" : e.getHTML()),
+    // StarterKit keeps an empty trailing paragraph after lists/blockquotes so the cursor can leave them;
+    // don't store that editing aid as part of the inspector's comment.
+    onUpdate: ({ editor: e }) => onChangeRef.current(e.isEmpty ? "" : e.getHTML().replace(/(?:<p><\/p>)+$/, "")),
   });
 
   return (

@@ -27,8 +27,12 @@ export function EditableText({
   const [status, setStatus] = useState<"idle" | "saving" | "saved">("idle");
   const [error, setError] = useState<string | null>(null);
   const cancelled = useRef(false);
+  // Enter disables the input while saving, and some browsers then fire blur: without this guard
+  // that second commit would re-send the old version and report a false conflict.
+  const inFlight = useRef(false);
 
   async function commit() {
+    if (inFlight.current) return;
     const next = draft.trim();
     if (next === current) {
       setEditing(false);
@@ -40,7 +44,10 @@ export function EditableText({
       return;
     }
     setStatus("saving");
-    const result = await save(next);
+    inFlight.current = true;
+    const result = await save(next).finally(() => {
+      inFlight.current = false;
+    });
     if (result.ok) {
       setCurrent(next);
       setDraft(next);
