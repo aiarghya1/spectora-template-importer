@@ -1,26 +1,27 @@
 @import "tailwindcss";
 
-:root {
-  --background: #ffffff;
-  --foreground: #171717;
-}
-
 @theme inline {
-  --color-background: var(--background);
-  --color-foreground: var(--foreground);
-  --font-sans: var(--font-geist-sans);
-  --font-mono: var(--font-geist-mono);
+  --font-sans: var(--font-geist-sans), ui-sans-serif, system-ui, sans-serif;
+  --font-mono: var(--font-geist-mono), ui-monospace, monospace;
 }
 
-@media (prefers-color-scheme: dark) {
-  :root {
-    --background: #0a0a0a;
-    --foreground: #ededed;
-  }
-}
-
-body {
-  background: var(--background);
-  color: var(--foreground);
-  font-family: Arial, Helvetica, sans-serif;
-}
+/*
+ * Comment HTML (imported, previewed and edited). Tailwind's preflight resets lists, headings and
+ * tables, so restore readable defaults for exactly the tags the sanitiser allows.
+ */
+.rich p { margin: 0 0 0.5em; }
+.rich p:last-child { margin-bottom: 0; }
+.rich ul { list-style: disc; padding-left: 1.5em; margin: 0.25em 0 0.5em; }
+.rich ol { list-style: decimal; padding-left: 1.5em; margin: 0.25em 0 0.5em; }
+.rich li { margin: 0.125em 0; }
+.rich a { color: #1d4ed8; text-decoration: underline; }
+.rich h1, .rich h2, .rich h3, .rich h4, .rich h5, .rich h6 { font-weight: 600; margin: 0.5em 0 0.25em; }
+.rich h1 { font-size: 1.25em; }
+.rich h2 { font-size: 1.15em; }
+.rich h3 { font-size: 1.05em; }
+.rich blockquote { border-left: 3px solid #d4d4d8; padding-left: 0.75em; color: #52525b; margin: 0.5em 0; }
+.rich hr { border-top: 1px solid #e4e4e7; margin: 0.75em 0; }
+.rich table { border-collapse: collapse; margin: 0.5em 0; }
+.rich td, .rich th { border: 1px solid #d4d4d8; padding: 0.25em 0.5em; vertical-align: top; }
+.rich th { background: #f4f4f5; font-weight: 600; }
+.rich s, .rich strike { text-decoration: line-through; }
