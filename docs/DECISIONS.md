@@ -39,4 +39,27 @@ Short architecture decision log. Each entry: decision, why, what we gave up.
 - 4 MB cap (Vercel function body limit is 4.5 MB), row cap, content sniffing (not just extension), server-side parsing only.
 - Upload goes through a Route Handler, not a Server Action: Next 16 caps Server Action bodies at 1 MB by default,
   and a Route Handler lets us return structured error codes for the failure-case UI.
+
+## D10 — Stateless preview → commit
+- Preview parses and returns the result; nothing is stored. Commit re-uploads the same file, re-parses on the
+  server and checks the SHA-256 matches the preview.
+- **Why:** never trust a client-sent tree; no draft tables to clean up; any server instance can handle either step.
+- **Gave up:** a second upload of the same bytes (≤ 4 MB, acceptable).
+
+## D11 — Visual editor only where it is lossless
+- Tiptap silently drops markup outside its schema (colour spans, tables, divs). Comments containing such markup
+  open in HTML mode; switching to visual mode warns first. The editor saves only after a real edit.
+- **Why:** opening a comment must never degrade four years of formatting.
+- **Gave up:** a single editing mode for every comment.
+
+## D12 — Two independent preservation checks
+- **Conservation totals** inside the parser: filled cells = stored + read-only extras + reported.
+- **`verifyPreservation`** re-reads the spreadsheet with its own row walk and compares every row with the result
+  (section, item, title, visible text, type, extras, order). Tests prove it catches dropped, moved and altered content.
+- **Why:** a parser checking only itself can share its own bug.
+
+## D13 — Abuse limits in the database
+- 30 imports per user per hour, 200 templates per user, text length CHECKs. Enforced in Postgres so they hold
+  for direct API calls too, not just the UI.
+- **Gave up:** configurable limits (not needed for this scope).
 - SheetJS 0.20.x from cdn.sheetjs.com — npm `xlsx@0.18.5` has known prototype-pollution and ReDoS CVEs.
