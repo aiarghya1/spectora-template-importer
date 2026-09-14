@@ -68,6 +68,28 @@ describe("verifyPreservation — discrepancies", () => {
     expect(fields(bytes, parse)).toEqual([]);
   });
 
+  it("rejects invented sections, items, and comments with no source rows", () => {
+    const { bytes, parse } = parsed([HEADERS, ["Roof", "Coverings", "A", "a"]]);
+    const tampered: ParseSuccess = structuredClone(parse);
+    tampered.sections.push({
+      name: "Invented section", source_row: 99, extras: {}, items: [{
+        name: "Invented item", source_row: 100, extras: {}, comments: [
+          { title: "Invented comment", body_html: "x", comment_type: null, source_row: 101, extras: {} },
+        ],
+      }],
+    });
+    expect(fields(bytes, tampered)).toEqual(expect.arrayContaining(["extra section", "extra item", "extra comment"]));
+  });
+
+  it("rejects duplicated source rows even when names and text match", () => {
+    const { bytes, parse } = parsed([HEADERS, ["Roof", "Coverings", "A", "a"]]);
+    const tampered: ParseSuccess = structuredClone(parse);
+    tampered.sections.push(structuredClone(tampered.sections[0]));
+    expect(fields(bytes, tampered)).toEqual(expect.arrayContaining([
+      "section source row", "item source row", "comment source row",
+    ]));
+  });
+
   it("stops listing mismatches after 200", () => {
     const rows = Array.from({ length: 250 }, (_, i) => ["Roof", "Coverings", `Comment ${i}`, "text"]);
     const { bytes, parse } = parsed([HEADERS, ...rows]);

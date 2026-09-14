@@ -65,11 +65,14 @@ export function verifyPreservation(bytes: Uint8Array, kind: FileKind, parse: Par
   const sectionsByStartRow = new Map<number, ParsedSection>();
   const itemsByStartRow = new Map<number, { section: ParsedSection; item: ParsedItem }>();
   for (const section of parse.sections) {
+    if (sectionsByStartRow.has(section.source_row)) mismatch(section.source_row, "section source row", "unique", "duplicate");
     sectionsByStartRow.set(section.source_row, section);
     for (const item of section.items) {
+      if (itemsByStartRow.has(item.source_row)) mismatch(item.source_row, "item source row", "unique", "duplicate");
       itemsByStartRow.set(item.source_row, { section, item });
       let previousRow = -Infinity;
       for (const comment of item.comments) {
+        if (commentsByRow.has(comment.source_row)) mismatch(comment.source_row, "comment source row", "unique", "duplicate");
         commentsByRow.set(comment.source_row, { section, item, comment });
         if (comment.source_row <= previousRow) {
           mismatch(comment.source_row, "order", `after row ${previousRow}`, `row ${comment.source_row}`);
@@ -89,6 +92,9 @@ export function verifyPreservation(bytes: Uint8Array, kind: FileKind, parse: Par
   let lastItem: string | null = null;
   let activeSection: ParsedSection | null = null;
   let activeItem: ParsedItem | null = null;
+  const matchedSections = new Set<ParsedSection>();
+  const matchedItems = new Set<ParsedItem>();
+  const matchedComments = new Set<ParsedComment>();
 
   for (let i = headerIndex + 1; i < rows.length; i++) {
     const row = range.s.r + i + 1;
@@ -123,6 +129,7 @@ export function verifyPreservation(bytes: Uint8Array, kind: FileKind, parse: Par
     if (sectionChanged) {
       activeSection = sectionsByStartRow.get(row) ?? null;
       if (activeSection?.name !== section) mismatch(row, "section", section, activeSection?.name ?? "(missing)");
+      if (activeSection) matchedSections.add(activeSection);
       activeItem = null;
     }
     if (item === null) {
@@ -134,6 +141,7 @@ export function verifyPreservation(bytes: Uint8Array, kind: FileKind, parse: Par
       if (activeItem?.name !== item || started?.section !== activeSection) {
         mismatch(row, "item", item, activeItem?.name ?? "(missing)");
       }
+      if (activeItem) matchedItems.add(activeItem);
     }
     lastSection = section;
     lastItem = item;
@@ -150,6 +158,7 @@ export function verifyPreservation(bytes: Uint8Array, kind: FileKind, parse: Par
     }
     report.commentRowsChecked++;
     const { comment } = stored;
+    matchedComments.add(comment);
     if (stored.section !== activeSection || stored.section.name !== section) {
       mismatch(row, "section", section, stored.section.name);
     }
@@ -170,12 +179,17 @@ export function verifyPreservation(bytes: Uint8Array, kind: FileKind, parse: Par
 
   // Sections must appear in order of their first row.
   parse.sections.forEach((s, index) => {
+    if (!matchedSections.has(s)) mismatch(s.source_row, "extra section", "no source declaration", s.name);
     const previous = parse.sections[index - 1];
     if (previous && s.source_row <= previous.source_row) mismatch(s.source_row, "section order", previous.name, s.name);
     s.items.forEach((item, itemIndex) => {
+      if (!matchedItems.has(item)) mismatch(item.source_row, "extra item", "no source declaration", item.name);
       const previousItem = s.items[itemIndex - 1];
       if (previousItem && item.source_row <= previousItem.source_row) {
         mismatch(item.source_row, "item order", previousItem.name, item.name);
+      }
+      for (const comment of item.comments) {
+        if (!matchedComments.has(comment)) mismatch(comment.source_row, "extra comment", "no source row", comment.title);
       }
     });
   });
