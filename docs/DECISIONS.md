@@ -62,4 +62,14 @@ Short architecture decision log. Each entry: decision, why, what we gave up.
 - 30 imports per user per hour, 200 templates per user, text length CHECKs. Enforced in Postgres so they hold
   for direct API calls too, not just the UI.
 - **Gave up:** configurable limits (not needed for this scope).
+
+## D14 — Test at the layer where each risk lives
+- **Import fidelity** → unit tests on the pure parser, plus an independent verifier.
+- **Data guarantees** (atomicity, RLS, copy independence) → the real migration in PGlite, not mocks.
+- **Server contracts** (validation, error mapping, redirects) → a recording fake Supabase client.
+- **UI behaviour** → jsdom component tests.
+- **The whole workflow** → Playwright against a real Supabase project.
+- Coverage limits in CI are set just below measured values, and the critical server paths are held at 100%.
+- **Gave up:** browser tests that run without a live Supabase project. Faking auth plus PostgREST
+  would prove less than the PGlite and fake-client layers already do.
 - SheetJS 0.20.x from cdn.sheetjs.com — npm `xlsx@0.18.5` has known prototype-pollution and ReDoS CVEs.

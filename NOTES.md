@@ -79,7 +79,23 @@ is *"what did I lose?"* A silent importer, even a good one, can't answer that.
 - **Deleted or foreign template:** a not-found page. **Database outage:** an error page with retry.
 
 ## How I checked my work
-- **`npm test`** (67 tests):
+- **Automated tests: 229 across 28 files**, all passing (`npm run test:coverage`, run in CI with coverage limits):
+
+  | Layer | What it covers |
+  |---|---|
+  | Unit | parser, HTML cleaner, independent preservation verifier, file checks, commit helpers, editor-compatibility check |
+  | Server | every server action (validation, edit conflict vs not found, database error mapping, position retry), upload route (401/413/400/409/422/429/500), login and sign-up (no open redirects, no account enumeration), email confirmation, auth proxy, paginated queries, Supabase cookie handling. Uses a small fake Supabase client that records each query. |
+  | Component (jsdom) | import wizard (failures, preview, commit with fingerprint, stale response ignored), comment editor (HTML mode protects formatting, save/conflict/⌘S/unsaved guard), rename, add/move/delete dialogs, issue list, reconciliation, tree preview, visual-editor toolbar, all pages |
+  | Database (PGlite, real migration) | atomic import, order, parser output = stored rows, copy independence, RLS isolation, cross-template FK, reordering, stale versions, quota and rate limit |
+  | End-to-end (Playwright) | 5 browser scenarios: bad files → preview → import → edit → reload → duplicate → edit copy → original unchanged → report. **Written but not yet run:** needs the Supabase project and a test account; skips itself until `E2E_EMAIL`/`E2E_PASSWORD` are set. |
+
+- **Coverage (V8, all of `src/`):** 97.4% lines · 95.1% statements · 87.8% branches · 94.5% functions. The only uncovered file is `layout.tsx` (static markup). CI fails if coverage drops, and server actions and the upload route are held at 100%.
+- **Bugs the tests caught and I fixed:**
+  - `safeFilename` stripped spaces and punctuation from filenames.
+  - Rename could save twice (Enter disables the field, which blurs it), causing a false "changed elsewhere" conflict.
+  - A failed sign-in wiped the email field (React 19 resets forms after an action).
+  - The visual editor saved a stray `<p></p>` after lists.
+- **Original unit and database checks in detail:**
   - **Parser:** hierarchy, order, fill-down, non-contiguous grouping, unknown/duplicate columns, CSV quoting/BOM, over-long values, damaged xlsx, zip bomb, determinism. Conservation is asserted in each case.
   - **Cleaner:** allowlist, XSS vectors, style filtering, media reporting.
   - **Preservation check:** proven to catch dropped, moved and altered content.

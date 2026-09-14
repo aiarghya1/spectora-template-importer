@@ -71,7 +71,10 @@ npm run dev                        # http://localhost:3000
 
 ## Checks
 ```bash
-npm test                           # parser, sanitiser, preservation checker, and the DB schema in PGlite
+npm test                           # unit, server, component (jsdom) and database (PGlite) tests
+npm run test:coverage              # same, with coverage limits enforced (as in CI)
+E2E_EMAIL=… E2E_PASSWORD=… npm run test:e2e   # Playwright against `npm run dev` (needs .env.local)
+E2E_BASE_URL=https://… E2E_EMAIL=… E2E_PASSWORD=… npm run test:e2e   # against a deployment
 npm run typecheck
 npm run lint
 npm run verify:export -- fixtures/<file>   # row-by-row preservation check against a real export

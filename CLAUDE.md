@@ -23,3 +23,12 @@ Web app: import a Spectora "Export HTML Text" spreadsheet, edit it, duplicate it
 - Any importer change must keep `npm run verify:export` clean on every file in `fixtures/`.
 - Supabase returns at most 1000 rows per request: paginate (`fetchAll` in `src/lib/templates/queries.ts`).
 - `DECISIONS.md` gets a new entry whenever a trade-off is made; `NOTES.md` is the reviewer-facing summary.
+
+## Testing conventions
+- Server code: mock `@/lib/supabase/server` and use `fakeSupabase` (`src/test/fake-supabase.ts`) to assert the exact
+  queries sent and to return rows or Postgres error codes. Don't name helpers `use*` (hooks lint rule).
+- Components/pages: add `// @vitest-environment jsdom`; reuse `src/test/next-mocks.tsx` (`linkModule`,
+  `redirectTo`, `notFoundSignal`, `actionSpies`). Async Server Components: `render(await Page({ params: Promise.resolve(...) }))`.
+- `src/test/setup.ts` provides jest-dom matchers, `<dialog>` and ProseMirror layout shims.
+- Coverage limits live in `vitest.config.mts`; raise them when coverage rises, never lower them to pass.
+- End-to-end: `e2e/workflow.spec.ts` (Playwright) creates its own spreadsheet and deletes what it creates.
