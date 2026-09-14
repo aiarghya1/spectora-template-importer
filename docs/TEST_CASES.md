@@ -1,14 +1,14 @@
 # Test cases
 
 **Status (2026-09-15):**
-- **Unit and integration:** 353 automated tests across 46 files, with **100% line, statement, branch and function coverage** of `src/` required in CI.
+- **Unit and integration:** 353 automated tests across 46 files, all passing in CI, with **100% line, statement, branch and function coverage** of `src/`.
 - **End-to-end:** 5 Playwright tests passed against the public Vercel app and a real Supabase test account.
 - **Manual checks:** the real Spectora export and seeded-template checks are **pending** (§4).
 
 | Layer | What "unit / integration / e2e" means here | Tests | Status |
 |---|---|---|---|
 | Unit | Pure logic (parser, sanitiser, verifier, file checks) and UI components in isolation (jsdom, actions mocked) | 195 | ✅ passing |
-| Integration | Server code wired together (actions, routes, auth, proxy, queries) against a recording fake Supabase client; pages composed with real components; **both SQL migrations** in PGlite | 158 | ✅ passing before the new cron regression; CI rerun pending |
+| Integration | Server code wired together (actions, routes, auth, proxy, queries) against a recording fake Supabase client; pages composed with real components; **both SQL migrations** in PGlite | 158 | ✅ passing |
 | End-to-end | A real browser against the deployed app and a real Supabase database | 5 | ✅ passing |
 | Manual / pending | Real Spectora export, seeded deployment | 6 | ⏳ not run |
 
@@ -506,7 +506,7 @@ Measured with V8 over every file in `src/`.
 |---|---|---|---|---|---|
 | Unit only | 195 (28 files) | not remeasured separately | | | |
 | Integration only | 158 (18 files) | not remeasured separately | | | |
-| **Combined — enforced in CI** | **353 (46 files)** | **100% required**; CI rerun pending | **100% required** | **100% required** | **100% required** |
+| **Combined — enforced in CI** | **353 (46 files)** | **100%** (1,317/1,317) | **100%** (1,538/1,538) | **100%** (1,170/1,170) | **100%** (333/333) |
 | End-to-end | 5/5 passed on the public app | not measured (browser coverage isn't collected) | | | |
 
 - **Why separate-layer percentages are omitted:** the layers target different code, and this change was verified with the combined coverage gate. The separate runs need remeasurement before reporting a percentage.
