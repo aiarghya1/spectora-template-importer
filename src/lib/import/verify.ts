@@ -5,7 +5,7 @@
  * Used by tests and `npm run verify:export`.
  */
 import * as XLSX from "xlsx";
-import { htmlToText } from "../html/sanitize";
+import { htmlToText, sanitizeForStorage } from "../html/sanitize";
 import { findHeaderRow, planColumns } from "./columns";
 import type { FileKind } from "./file-check";
 import type { ParsedComment, ParsedItem, ParsedSection, ParseSuccess } from "./types";
@@ -167,6 +167,8 @@ export function verifyPreservation(bytes: Uint8Array, kind: FileKind, parse: Par
     }
     if (comment.title !== title) mismatch(row, "title", title, comment.title);
     if (visibleText(comment.body_html) !== visibleText(body)) mismatch(row, "text", visibleText(body), visibleText(comment.body_html));
+    const expectedHtml = sanitizeForStorage(body).html;
+    if (comment.body_html !== expectedHtml) mismatch(row, "html", expectedHtml, comment.body_html);
     if ((comment.comment_type ?? "") !== type) mismatch(row, "type", type, comment.comment_type ?? "");
     for (const column of extras) {
       const expected = cells[column.index];

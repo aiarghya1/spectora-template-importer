@@ -90,6 +90,14 @@ describe("verifyPreservation — discrepancies", () => {
     ]));
   });
 
+  it("detects lost formatting even when visible comment text is unchanged", () => {
+    const { bytes, parse } = parsed([HEADERS, ["Roof", "Coverings", "A", "<p>Important <b>warning</b></p>"]]);
+    const tampered: ParseSuccess = structuredClone(parse);
+    tampered.sections[0].items[0].comments[0].body_html = "<p>Important warning</p>";
+    expect(fields(bytes, tampered)).toContain("html");
+    expect(fields(bytes, parse)).toEqual([]);
+  });
+
   it("stops listing mismatches after 200", () => {
     const rows = Array.from({ length: 250 }, (_, i) => ["Roof", "Coverings", `Comment ${i}`, "text"]);
     const { bytes, parse } = parsed([HEADERS, ...rows]);
