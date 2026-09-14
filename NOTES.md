@@ -80,7 +80,7 @@ is *"what did I lose?"* A silent importer, even a good one, can't answer that.
 - **Deleted or foreign template:** a not-found page. **Database outage:** an error page with retry.
 
 ## How I checked my work
-- **Automated tests: 353 across 46 files**, all passing in CI on 2026-09-15, including the cron proxy regression check (`npm run test:coverage` fails below 100% coverage). Catalogue with IDs, inputs and expected results: `docs/TEST_CASES.md`.
+- **Automated tests: 356 across 46 files**, all passing in CI on 2026-09-15, including repeated-source-row, invented-node, and formatting-loss checks (`npm run test:coverage` fails below 100% coverage). Catalogue with IDs, inputs and expected results: `docs/TEST_CASES.md`.
 
   | Layer | What it covers |
   |---|---|

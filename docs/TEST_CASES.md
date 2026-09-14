@@ -1,13 +1,13 @@
 # Test cases
 
 **Status (2026-09-15):**
-- **Unit and integration:** 353 automated tests across 46 files, all passing in CI, with **100% line, statement, branch and function coverage** of `src/`.
+- **Unit and integration:** 356 automated tests across 46 files, all passing in CI, with **100% line, statement, branch and function coverage** of `src/`.
 - **End-to-end:** 5 Playwright tests passed against the public Vercel app and a real Supabase test account.
 - **Manual checks:** the real Spectora export and seeded-template checks are **pending** (§4).
 
 | Layer | What "unit / integration / e2e" means here | Tests | Status |
 |---|---|---|---|
-| Unit | Pure logic (parser, sanitiser, verifier, file checks) and UI components in isolation (jsdom, actions mocked) | 195 | ✅ passing |
+| Unit | Pure logic (parser, sanitiser, verifier, file checks) and UI components in isolation (jsdom, actions mocked) | 198 | ✅ passing |
 | Integration | Server code wired together (actions, routes, auth, proxy, queries) against a recording fake Supabase client; pages composed with real components; **both SQL migrations** in PGlite | 158 | ✅ passing |
 | End-to-end | A real browser against the deployed app and a real Supabase database | 5 | ✅ passing |
 | Manual / pending | Real Spectora export, seeded deployment | 6 | ⏳ not run |
@@ -16,7 +16,7 @@ Each row names the test file so it can be found. `(×n)` means one parameterised
 
 ## How to run
 ```bash
-npm test                                         # unit + integration (353)
+npm test                                         # unit + integration (356)
 npm run test:coverage                            # same, failing below 100% coverage (as CI)
 npm run test:all                                 # coverage + browser workflow; reads .env.local
 npx vitest run src/lib/import                    # one area
@@ -27,7 +27,7 @@ npm run verify:export -- fixtures/<file>         # preservation check on a real 
 
 ---
 
-## 1. Unit tests (195)
+## 1. Unit tests (198)
 
 ### 1.1 HTML sanitiser — `src/lib/html/__tests__/sanitize.test.ts` (14)
 | ID | Test case | Input | Expected result |
@@ -246,7 +246,7 @@ Every successful case also asserts **conservation**: filled cells = stored + rea
 | UT-ZIP-03 | Zip64 markers | Entry count 0xFFFF; directory offset 0xFFFFFFFF; entry size 0xFFFFFFFF | `Infinity` for each |
 | UT-ZIP-04 | Broken central directory | Offset pointing at a local header; offset past the end | `null` |
 
-### 1.11 Verifier edge cases — `src/lib/import/__tests__/verify-edge.test.ts` (6)
+### 1.11 Verifier edge cases — `src/lib/import/__tests__/verify-edge.test.ts` (9)
 | ID | Test case | Input | Expected result |
 |---|---|---|---|
 | UT-VEX-01 | CSV without a type column | CSV export | No mismatches |
@@ -255,6 +255,9 @@ Every successful case also asserts **conservation**: filled cells = stored + rea
 | UT-VEX-04 | Structure-row discrepancies | Item-only and section-only rows removed from the result | `item` and `section` mismatches marked "(missing)" |
 | UT-VEX-05 | Mismatch cap | 250 altered titles | 200 listed |
 | UT-VEX-06 | Row neither imported nor reported | Skipped row's issue removed from the result | Row 3 unaccounted |
+| UT-VEX-07 | Invented hierarchy | Section, item, and comment with source rows absent from the file | Each extra node is flagged |
+| UT-VEX-08 | Reused source rows | Duplicate an otherwise identical section, item, and comment | All three source-row collisions are flagged |
+| UT-VEX-09 | Formatting loss | Remove bold markup while preserving visible text | HTML mismatch is flagged |
 
 ### 1.12 Sanitiser edge cases — `src/lib/html/__tests__/sanitize-edge.test.ts` (9)
 | ID | Test case | Input | Expected result |
@@ -504,9 +507,9 @@ Measured with V8 over every file in `src/`.
 
 | Run | Tests | Lines | Statements | Branches | Functions |
 |---|---|---|---|---|---|
-| Unit only | 195 (28 files) | not remeasured separately | | | |
+| Unit only | 198 (28 files) | not remeasured separately | | | |
 | Integration only | 158 (18 files) | not remeasured separately | | | |
-| **Combined — enforced in CI** | **353 (46 files)** | **100%** (1,317/1,317) | **100%** (1,538/1,538) | **100%** (1,170/1,170) | **100%** (333/333) |
+| **Combined — enforced in CI** | **356 (46 files)** | **100%** (1,332/1,332) | **100%** (1,562/1,562) | **100%** (1,188/1,188) | **100%** (333/333) |
 | End-to-end | 5/5 passed on the public app | not measured (browser coverage isn't collected) | | | |
 
 - **Why separate-layer percentages are omitted:** the layers target different code, and this change was verified with the combined coverage gate. The separate runs need remeasurement before reporting a percentage.
